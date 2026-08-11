@@ -1,59 +1,78 @@
 <script setup>
-import { ref } from "vue";
+import { ref, onMounted, nextTick } from "vue";
 import { Send, Save } from "lucide-vue-next";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { useDraftStore } from "@/stores/draft";
-import { onMounted } from "vue";
-import { useRoute } from "vue-router";
-import { sendToAI } from "@/services/ai";
-import { nextTick } from "vue";
-import { buildDocument } from "@/services/documentBuilder";
+import { sendToAI, extractDocument } from "@/services/ai";
+import { createEmptyDocument } from "@/services/documentBuilder";
 
 const loadingMessages = ref(true);
 const messagesContainer = ref(null);
+
 const router = useRouter();
-const draftStore = useDraftStore();
 const route = useRoute();
-const documentContent = ref("");
-const createNewDraft = async () => {
-  const draft = await draftStore.createDraft();
+const draftStore = useDraftStore();
 
-  draftStore.currentDraft = draft;
-
-  const welcomeMessage = {
-    role: "assistant",
-    content:
-      "Hi! What would you like to create today?\n\n• CV\n• Resume\n• Cover Letter\n• Essay",
-  };
-
-  messages.value = [welcomeMessage];
-
-  await draftStore.addMessage(draft.id, "assistant", welcomeMessage.content);
-
-  await draftStore.fetchDrafts();
-
-  router.push(`/app/draft/${draft.id}`);
-};
 const message = ref("");
-
 const messages = ref([]);
 
+const documentContent = ref(createEmptyDocument("resume"));
+
+const createNewDraft = async () => {
+  try {
+    const draft = await draftStore.createDraft();
+
+    draftStore.currentDraft = draft;
+
+    const welcomeMessage = {
+      role: "assistant",
+      content:
+        "Hi! What would you like to create today?\n\n• CV\n• Resume\n• Cover Letter\n• Essay",
+    };
+
+    messages.value = [welcomeMessage];
+
+    await draftStore.addMessage(draft.id, "assistant", welcomeMessage.content);
+
+    await draftStore.fetchDrafts();
+
+    router.push(`/app/draft/${draft.id}`);
+  } catch (error) {
+    console.error("Failed to create draft:", error);
+  }
+};
+
 onMounted(async () => {
-  await draftStore.fetchDrafts();
+  try {
+    await draftStore.fetchDrafts();
 
-  const data = await draftStore.getMessages(route.params.id);
+    const draft = await draftStore.getDraft(route.params.id);
 
-  messages.value = data;
+    const data = await draftStore.getMessages(route.params.id);
 
-  loadingMessages.value = false;
+    messages.value = data;
 
-  await scrollToBottom();
+    // Restore saved document preview
+    if (draft.document_data) {
+      documentContent.value = draft.document_data;
+    } else {
+      documentContent.value = createEmptyDocument(
+        draft.document_type || "resume",
+      );
+    }
+
+    loadingMessages.value = false;
+
+    await scrollToBottom();
+  } catch (error) {
+    console.error("Failed to load draft:", error);
+    loadingMessages.value = false;
+  }
 });
 
 async function sendMessage() {
   if (!message.value.trim()) return;
 
-  // Must have an active draft
   if (!draftStore.currentDraft) {
     alert("Please create or open a draft first");
     return;
@@ -61,7 +80,7 @@ async function sendMessage() {
 
   const text = message.value;
 
-  // Auto rename draft from first user message
+  // Automatically rename the draft from the first user message
   if (
     draftStore.currentDraft.title === "Untitled Draft" &&
     messages.value.length <= 2
@@ -75,7 +94,7 @@ async function sendMessage() {
     await draftStore.fetchDrafts();
   }
 
-  // Add user message
+  // Add user message to UI
   messages.value.push({
     role: "user",
     content: text,
@@ -100,23 +119,39 @@ async function sendMessage() {
   await scrollToBottom();
 
   try {
+    // Send conversation to Gemini
     const aiReply = await sendToAI(
       messages.value.filter((msg) => msg.content !== "Thinking..."),
     );
 
     // Replace thinking message
-    messages.value[thinkingIndex] = aiReply;
-    documentContent.value = buildDocument(messages.value);
-    // Save AI message
+    messages.value[thinkingIndex] = {
+      role: "assistant",
+      content: aiReply.content,
+    };
+
+    // Save AI response
     await draftStore.addMessage(
       draftStore.currentDraft.id,
       "assistant",
       aiReply.content,
     );
 
+    // Extract structured document data
+    const document = await extractDocument(
+      messages.value,
+      documentContent.value.documentType,
+    );
+
+    // Animate the preview
+    animateDocument(document);
+
+    // Save the complete document to Supabase
+    await draftStore.saveDocument(draftStore.currentDraft.id, document);
+
     await scrollToBottom();
   } catch (error) {
-    console.error(error);
+    console.error("AI ERROR:", error);
 
     messages.value[thinkingIndex] = {
       role: "assistant",
@@ -126,16 +161,32 @@ async function sendMessage() {
     await scrollToBottom();
   }
 }
+
 const openDraft = async (id) => {
-  await draftStore.getDraft(id);
+  try {
+    const draft = await draftStore.getDraft(id);
 
-  await loadDraftMessages(id);
+    await loadDraftMessages(id);
 
-  router.push(`/app/draft/${id}`);
+    // Restore saved preview
+    if (draft.document_data) {
+      documentContent.value = draft.document_data;
+    } else {
+      documentContent.value = createEmptyDocument(
+        draft.document_type || "resume",
+      );
+    }
+
+    router.push(`/app/draft/${id}`);
+  } catch (error) {
+    console.error("Failed to open draft:", error);
+  }
 };
+
 const loadDraftMessages = async (draftId) => {
   messages.value = await draftStore.getMessages(draftId);
 };
+
 const scrollToBottom = async () => {
   await nextTick();
 
@@ -143,6 +194,161 @@ const scrollToBottom = async () => {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
 };
+
+// Enter = send
+// Shift + Enter = new line
+function handleEnter(event) {
+  if (event.shiftKey) {
+    return;
+  }
+
+  event.preventDefault();
+  sendMessage();
+}
+
+/*
+|--------------------------------------------------------------------------
+| DOCUMENT ANIMATION
+|--------------------------------------------------------------------------
+*/
+
+function animateDocument(newDocument) {
+  const currentDocument = JSON.parse(JSON.stringify(documentContent.value));
+
+  documentContent.value = currentDocument;
+
+  // Personal information
+  animateText(currentDocument.personalInfo, newDocument.personalInfo);
+
+  // Summary
+  animateTextField(currentDocument, newDocument, "summary");
+
+  // Arrays
+  animateArray(currentDocument, newDocument, "skills");
+
+  animateArray(currentDocument, newDocument, "certifications");
+
+  animateArray(currentDocument, newDocument, "achievements");
+
+  // Object arrays
+  animateObjects(currentDocument, newDocument, "experience");
+
+  animateObjects(currentDocument, newDocument, "education");
+
+  animateObjects(currentDocument, newDocument, "projects");
+}
+
+/*
+|--------------------------------------------------------------------------
+| ANIMATE PERSONAL INFO
+|--------------------------------------------------------------------------
+*/
+
+function animateText(target, source) {
+  if (!source) return;
+
+  Object.keys(source).forEach((key) => {
+    const value = source[key];
+
+    if (!value || value === target[key]) return;
+
+    target[key] = "";
+
+    let index = 0;
+
+    const interval = setInterval(() => {
+      target[key] = value.slice(0, index + 1);
+
+      index++;
+
+      if (index >= value.length) {
+        clearInterval(interval);
+      }
+    }, 20);
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| ANIMATE TEXT FIELD
+|--------------------------------------------------------------------------
+*/
+
+function animateTextField(target, source, field) {
+  const value = source[field];
+
+  if (!value || value === target[field]) return;
+
+  target[field] = "";
+
+  let index = 0;
+
+  const interval = setInterval(() => {
+    target[field] = value.slice(0, index + 1);
+
+    index++;
+
+    if (index >= value.length) {
+      clearInterval(interval);
+    }
+  }, 20);
+}
+
+/*
+|--------------------------------------------------------------------------
+| ANIMATE SIMPLE ARRAYS
+|--------------------------------------------------------------------------
+*/
+
+function animateArray(target, source, field) {
+  if (!source[field]?.length) return;
+
+  target[field] = [];
+
+  source[field].forEach((item, index) => {
+    setTimeout(() => {
+      target[field].push(item);
+    }, index * 250);
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| ANIMATE OBJECT ARRAYS
+|--------------------------------------------------------------------------
+*/
+
+function animateObjects(target, source, field) {
+  if (!source[field]?.length) return;
+
+  target[field] = [];
+
+  source[field].forEach((item, index) => {
+    const animatedItem = {};
+
+    target[field].push(animatedItem);
+
+    Object.keys(item).forEach((key) => {
+      const value = item[key] || "";
+
+      animatedItem[key] = "";
+
+      setTimeout(() => {
+        let charIndex = 0;
+
+        const interval = setInterval(() => {
+          animatedItem[key] = value.slice(0, charIndex + 1);
+
+          charIndex++;
+
+          if (charIndex >= value.length) {
+            clearInterval(interval);
+          }
+        }, 15);
+      }, index * 200);
+    });
+  });
+}
 </script>
 <template>
   <div class="h-screen overflow-hidden bg-[#0f1117] text-white">
@@ -247,11 +453,13 @@ const scrollToBottom = async () => {
           <div
             class="flex items-center gap-3 rounded-2xl border border-[#2a3142] bg-[#171923] p-3"
           >
-            <input
+            <textarea
               v-model="message"
               placeholder="Reply to FirstDraft..."
-              class="flex-1 bg-transparent outline-none"
-            />
+              rows="1"
+              @keydown.enter="handleEnter"
+              class="max-h-40 flex-1 resize-none bg-transparent outline-none"
+            ></textarea>
 
             <button
               type="submit"
@@ -268,38 +476,210 @@ const scrollToBottom = async () => {
         <div class="mx-auto w-full max-w-[900px]">
           <!-- A4 PAGE -->
           <div
-            class="min-h-[1123px] rounded-2xl bg-white p-12 text-black shadow-2xl"
+            class="min-h-[1123px] bg-white p-10 text-black shadow-2xl sm:p-12"
           >
-            <div class="border-b pb-6">
-              <h1 class="text-4xl font-bold">Untitled Document</h1>
+            <!-- Header -->
+            <div class="border-b border-gray-300 pb-6">
+              <h1 class="text-3xl font-bold tracking-tight text-gray-900">
+                {{ documentContent.personalInfo.name || "Your Name" }}
+              </h1>
 
-              <p class="mt-2 text-zinc-500">
-                Your document updates in real time.
-              </p>
-            </div>
-
-            <div v-if="documentContent" class="prose max-w-none">
-              <pre class="whitespace-pre-wrap font-sans"
-                >{{ documentContent }}
-  </pre
+              <div
+                v-if="
+                  documentContent.personalInfo.email ||
+                  documentContent.personalInfo.phone ||
+                  documentContent.personalInfo.location ||
+                  documentContent.personalInfo.linkedin ||
+                  documentContent.personalInfo.website
+                "
+                class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500"
               >
-            </div>
+                <span v-if="documentContent.personalInfo.email">
+                  {{ documentContent.personalInfo.email }}
+                </span>
 
-            <div v-else class="flex min-h-[800px] items-center justify-center">
-              <div class="text-center">
-                <div v-if="documentContent" class="whitespace-pre-wrap">
-                  {{ documentContent }}
-                </div>
+                <span v-if="documentContent.personalInfo.phone">
+                  {{ documentContent.personalInfo.phone }}
+                </span>
 
-                <div v-else class="text-center">
-                  <h2 class="text-2xl font-semibold">Select a document type</h2>
+                <span v-if="documentContent.personalInfo.location">
+                  {{ documentContent.personalInfo.location }}
+                </span>
 
-                  <p class="mt-2 text-zinc-500">
-                    FirstDraft will build your document as you chat.
-                  </p>
-                </div>
+                <span v-if="documentContent.personalInfo.linkedin">
+                  {{ documentContent.personalInfo.linkedin }}
+                </span>
+
+                <span v-if="documentContent.personalInfo.website">
+                  {{ documentContent.personalInfo.website }}
+                </span>
               </div>
             </div>
+
+            <!-- Empty State -->
+            <div
+              v-if="
+                !documentContent.summary &&
+                !documentContent.experience?.length &&
+                !documentContent.education?.length &&
+                !documentContent.skills?.length &&
+                !documentContent.projects?.length &&
+                !documentContent.certifications?.length
+              "
+              class="flex min-h-[800px] items-center justify-center"
+            >
+              <div class="text-center">
+                <h2 class="text-2xl font-semibold text-gray-800">
+                  Your document will appear here
+                </h2>
+
+                <p class="mt-2 text-sm text-gray-500">
+                  Start chatting with FirstDraft to build your resume.
+                </p>
+              </div>
+            </div>
+
+            <!-- Summary -->
+            <section v-if="documentContent.summary" class="mt-8">
+              <h2
+                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
+              >
+                Professional Summary
+              </h2>
+
+              <p class="mt-3 text-sm leading-6 text-gray-700">
+                {{ documentContent.summary }}
+              </p>
+            </section>
+
+            <!-- Experience -->
+            <section v-if="documentContent.experience?.length" class="mt-8">
+              <h2
+                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
+              >
+                Experience
+              </h2>
+
+              <div
+                v-for="(job, index) in documentContent.experience"
+                :key="index"
+                class="mt-5"
+              >
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="font-semibold text-gray-900">
+                      {{ job.position }}
+                    </h3>
+
+                    <p class="text-sm text-gray-600">
+                      {{ job.company }}
+                    </p>
+                  </div>
+
+                  <span class="shrink-0 text-sm text-gray-500">
+                    {{ job.date }}
+                  </span>
+                </div>
+
+                <p
+                  v-if="job.description"
+                  class="mt-2 text-sm leading-6 text-gray-700"
+                >
+                  {{ job.description }}
+                </p>
+              </div>
+            </section>
+
+            <!-- Education -->
+            <section v-if="documentContent.education?.length" class="mt-8">
+              <h2
+                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
+              >
+                Education
+              </h2>
+
+              <div
+                v-for="(education, index) in documentContent.education"
+                :key="index"
+                class="mt-5"
+              >
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="font-semibold text-gray-900">
+                      {{ education.degree }}
+                    </h3>
+
+                    <p class="text-sm text-gray-600">
+                      {{ education.school }}
+                    </p>
+                  </div>
+
+                  <span class="shrink-0 text-sm text-gray-500">
+                    {{ education.date }}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <!-- Skills -->
+            <section v-if="documentContent.skills?.length" class="mt-8">
+              <h2
+                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
+              >
+                Skills
+              </h2>
+
+              <p class="mt-3 text-sm leading-6 text-gray-700">
+                {{ documentContent.skills.join(" • ") }}
+              </p>
+            </section>
+
+            <!-- Projects -->
+            <section v-if="documentContent.projects?.length" class="mt-8">
+              <h2
+                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
+              >
+                Projects
+              </h2>
+
+              <div
+                v-for="(project, index) in documentContent.projects"
+                :key="index"
+                class="mt-5"
+              >
+                <h3 class="font-semibold text-gray-900">
+                  {{ project.name }}
+                </h3>
+
+                <p
+                  v-if="project.description"
+                  class="mt-1 text-sm leading-6 text-gray-700"
+                >
+                  {{ project.description }}
+                </p>
+              </div>
+            </section>
+
+            <!-- Certifications -->
+            <section v-if="documentContent.certifications?.length" class="mt-8">
+              <h2
+                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
+              >
+                Certifications
+              </h2>
+
+              <ul class="mt-3 space-y-2">
+                <li
+                  v-for="(
+                    certification, index
+                  ) in documentContent.certifications"
+                  :key="index"
+                  class="text-sm text-gray-700"
+                >
+                  {{ certification }}
+                </li>
+              </ul>
+            </section>
           </div>
         </div>
       </section>

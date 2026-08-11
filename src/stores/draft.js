@@ -86,6 +86,56 @@ export const useDraftStore = defineStore("draft", {
 
       return data;
     },
+    async createDraft() {
+      const sessionResult = await supabase.auth.getSession();
+
+      console.log("SESSION:", sessionResult);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      console.log("USER:", user);
+
+      if (!user) {
+        throw new Error("No authenticated user");
+      }
+
+      const emptyDocument = {
+        documentType: "resume",
+        personalInfo: {
+          name: "",
+          email: "",
+          phone: "",
+          location: "",
+          linkedin: "",
+          website: "",
+        },
+        summary: "",
+        experience: [],
+        education: [],
+        skills: [],
+        projects: [],
+        certifications: [],
+        achievements: [],
+      };
+
+      const { data, error } = await supabase
+        .from("drafts")
+        .insert({
+          user_id: user.id,
+          title: "Untitled Draft",
+          document_data: emptyDocument,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      this.currentDraft = data;
+
+      return data;
+    },
     async updateDraftTitle(id, title) {
       const { error } = await supabase
         .from("drafts")
@@ -93,6 +143,22 @@ export const useDraftStore = defineStore("draft", {
         .eq("id", id);
 
       if (error) throw error;
+    },
+    async saveDocument(id, document) {
+      const { data, error } = await supabase
+        .from("drafts")
+        .update({
+          document_data: document,
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      this.currentDraft = data;
+
+      return data;
     },
   },
 });

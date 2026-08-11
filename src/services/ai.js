@@ -19,9 +19,21 @@ You never refer to yourself as "an AI language model" or "Claude" or any other n
 Your tone is friendly and conversational — like a sharp, encouraging friend who happens to be great at writing documents, not a corporate form. Use plain language, contractions, and light warmth. Avoid sounding robotic, overly formal, or like a checklist being read aloud. One question (or a tightly related pair) at a time — never dump a wall of questions on the user at once.
 
 2. Core Flow (always follow this order)
-Step 1 — Greet and ask document type
+Step 1 — Determine document type
 
-Always start by welcoming the user and asking which of the four they want to build:
+Determine which document type the user wants from the conversation.
+
+If the user has already selected a document type, NEVER ask them to select it again.
+
+The supported document types are:
+- CV
+- Resume
+- Cover Letter
+- Essay
+
+If the document type has already been established by the application or conversation, immediately continue with the appropriate question track.
+
+Only ask the user to choose a document type if it has not already been established.
 
 CV (Curriculum Vitae)
 Resume
@@ -33,6 +45,44 @@ If the user seems unsure of the difference, briefly explain (see Section 3) — 
 Step 2 — Branch into the right question track
 
 Once the document type is chosen, move into the matching question track (Section 4). Ask questions one step at a time, building context progressively. Never ask a question you can already answer from what the user already told you.
+
+Question Guidance
+
+When asking the user for information that requires a specific format, always provide a short example of what a good answer looks like.
+
+Do not make examples sound like the user's actual information. Clearly introduce them as examples.
+
+For work experience, ask for the job title, company or organization, dates, main responsibilities, and achievements or measurable results if available.
+
+Example:
+
+"Tell me about one of your work experiences. You can send it like this:
+
+Job Title — Company — Dates
+Example: Software Engineering Intern — KAD ICT Hub — Jan 2024–Aug 2024
+
+Then briefly tell me what you did in the role and any results or achievements."
+
+For education, give an example such as:
+
+"Degree — Institution — Dates
+Example: B.Sc. Computer Science — Landmark University — 2021–2025"
+
+For projects, give an example such as:
+
+"Project Name — Technologies — What you built
+Example: AI Resume Builder — Vue.js, Tailwind CSS — Built a web app that generates tailored resumes."
+
+For certifications, give an example such as:
+
+"Certification — Issuing Organization — Year
+Example: Machine Learning Certificate — KAD ICT Hub — 2024"
+
+For skills, give an example such as:
+
+"Example: Python, JavaScript, Vue.js, SQL, Git"
+
+Keep examples short and relevant to the question. Do not overwhelm the user with a form or multiple questions.
 
 Step 3 — Recommend a template
 
@@ -147,19 +197,130 @@ export async function sendToAI(messages) {
       }),
     },
   );
-  if (!response.ok) {
-    const error = await response.json();
 
-    console.error(error);
-
-    throw new Error("Gemini request failed");
-  }
   const data = await response.json();
-  console.log("Gemini Response:", data);
+
+  if (!response.ok) {
+    console.error("Gemini API error:", data);
+    throw new Error(data?.error?.message || "Gemini request failed");
+  }
+
+  const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!content) {
+    throw new Error("Gemini returned an empty response");
+  }
+
   return {
     role: "assistant",
-    content:
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "Sorry, I couldn't generate a response.",
+    content,
   };
+}
+export async function extractDocument(messages, documentType = "resume") {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+  const conversation = messages
+    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+    .join("\n\n");
+
+  const prompt = `
+You are a document information extractor for FirstDraft.
+
+Document type:
+${documentType}
+
+Read the conversation below and extract ONLY information explicitly provided by the user.
+
+Never invent information.
+
+Return ONLY valid JSON.
+
+Use exactly this structure:
+
+{
+  "documentType": "${documentType}",
+  "personalInfo": {
+    "name": "",
+    "email": "",
+    "phone": "",
+    "location": "",
+    "linkedin": "",
+    "website": ""
+  },
+  "summary": "",
+  "experience": [],
+  "education": [],
+  "skills": [],
+  "projects": [],
+  "certifications": [],
+  "achievements": []
+}
+
+Experience objects:
+{
+  "position": "",
+  "company": "",
+  "date": "",
+  "description": ""
+}
+
+Education objects:
+{
+  "degree": "",
+  "school": "",
+  "date": ""
+}
+
+Project objects:
+{
+  "name": "",
+  "description": ""
+}
+
+Conversation:
+
+${conversation}
+`;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
+      }),
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error("Document extraction error:", data);
+    throw new Error(data?.error?.message || "Document extraction failed");
+  }
+
+  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!rawText) {
+    throw new Error("Document extraction returned nothing");
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch (error) {
+    console.error("Document extraction returned invalid JSON:", rawText);
+
+    throw new Error("Invalid document data");
+  }
 }

@@ -5,18 +5,75 @@ import { useRouter, useRoute } from "vue-router";
 import { useDraftStore } from "@/stores/draft";
 import { sendToAI, extractDocument } from "@/services/ai";
 import { createEmptyDocument } from "@/services/documentBuilder";
+import { computed } from "vue";
+import { useDocumentProgress } from "@/composables/useDocumentProgress";
+import ModernTemplate from "@/components/templates/ModernTemplate.vue";
+import CorporateTemplate from "@/components/templates/CorporateTemplate.vue";
+import AcademicTemplate from "@/components/templates/AcademicTemplate.vue";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import { Document, Packer, Paragraph, TextRun } from "docx";
+import { saveAs } from "file-saver";
+import { exportWord } from "../../services/exportWord";
 
 const loadingMessages = ref(true);
 const messagesContainer = ref(null);
-
+const progress = computed(() => useDocumentProgress(documentContent.value));
 const router = useRouter();
 const route = useRoute();
 const draftStore = useDraftStore();
-
+const selectedTemplate = ref("modern");
 const message = ref("");
 const messages = ref([]);
+const sidebarOpen = ref(true);
+const mobileMenuOpen = ref(false);
+const sidebarWidth = ref(280);
+const isDragging = ref(false);
+const mobileTab = ref("chat");
 
 const documentContent = ref(createEmptyDocument("resume"));
+
+async function downloadWord() {
+  await exportWord(documentContent.value);
+}
+const previewRef = ref(null);
+
+async function exportPDF() {
+  const element = previewRef.value;
+
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+  });
+
+  const imgData = canvas.toDataURL("image/png");
+
+  const pdf = new jsPDF("p", "mm", "a4");
+
+  const pdfWidth = 210;
+  const pdfHeight = 297;
+
+  const imgWidth = pdfWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+  let heightLeft = imgHeight;
+  let position = 0;
+
+  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+
+  heightLeft -= pdfHeight;
+
+  while (heightLeft > 0) {
+    position = heightLeft - imgHeight;
+
+    pdf.addPage();
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+
+    heightLeft -= pdfHeight;
+  }
+
+  pdf.save("FirstDraft.pdf");
+}
 
 const createNewDraft = async () => {
   try {
@@ -62,7 +119,9 @@ onMounted(async () => {
     }
 
     loadingMessages.value = false;
-
+    if (draft.template) {
+      selectedTemplate.value = draft.template;
+    }
     await scrollToBottom();
   } catch (error) {
     console.error("Failed to load draft:", error);
@@ -120,9 +179,11 @@ async function sendMessage() {
 
   try {
     // Send conversation to Gemini
-    const aiReply = await sendToAI(
-      messages.value.filter((msg) => msg.content !== "Thinking..."),
-    );
+    const recentMessages = messages.value
+      .filter((msg) => msg.content !== "Thinking...")
+      .slice(-12);
+
+    const aiReply = await sendToAI(recentMessages);
 
     // Replace thinking message
     messages.value[thinkingIndex] = {
@@ -142,11 +203,13 @@ async function sendMessage() {
       messages.value,
       documentContent.value.documentType,
     );
+    selectedTemplate.value = recommendTemplate(document);
 
-    // Animate the preview
     animateDocument(document);
 
-    // Save the complete document to Supabase
+    // Auto recommend template
+    recommendTemplate(document);
+
     await draftStore.saveDocument(draftStore.currentDraft.id, document);
 
     await scrollToBottom();
@@ -194,6 +257,13 @@ const scrollToBottom = async () => {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
 };
+async function selectTemplate(template) {
+  selectedTemplate.value = template;
+
+  if (draftStore.currentDraft) {
+    await draftStore.updateTemplate(draftStore.currentDraft.id, template);
+  }
+}
 
 // Enter = send
 // Shift + Enter = new line
@@ -293,7 +363,21 @@ function animateTextField(target, source, field) {
     }
   }, 20);
 }
+function recommendTemplate(document) {
+  if (
+    document.publications?.length > 0 ||
+    document.research?.length > 0 ||
+    document.documentType === "cv"
+  ) {
+    return "academic";
+  }
 
+  if (document.experience?.length >= 3 && document.skills?.length >= 5) {
+    return "corporate";
+  }
+
+  return "modern";
+}
 /*
 |--------------------------------------------------------------------------
 | ANIMATE SIMPLE ARRAYS
@@ -311,7 +395,26 @@ function animateArray(target, source, field) {
     }, index * 250);
   });
 }
+function startDrag() {
+  isDragging.value = true;
 
+  document.addEventListener("mousemove", dragSidebar);
+  document.addEventListener("mouseup", stopDrag);
+}
+
+function dragSidebar(e) {
+  if (!isDragging.value) return;
+
+  sidebarWidth.value = Math.max(220, Math.min(500, e.clientX));
+}
+
+function stopDrag() {
+  isDragging.value = false;
+
+  document.removeEventListener("mousemove", dragSidebar);
+
+  document.removeEventListener("mouseup", stopDrag);
+}
 /*
 |--------------------------------------------------------------------------
 | ANIMATE OBJECT ARRAYS
@@ -352,10 +455,18 @@ function animateObjects(target, source, field) {
 </script>
 <template>
   <div class="h-screen overflow-hidden bg-[#0f1117] text-white">
-    <div class="grid h-full grid-cols-[280px_450px_minmax(0,1fr)]">
+    <div class="flex lg:hidden">
+      <button @click="mobileTab = 'chat'" class="flex-1 p-3">Chat</button>
+
+      <button @click="mobileTab = 'preview'" class="flex-1 p-3">Preview</button>
+    </div>
+    <div class="flex h-[calc(100vh-48px)]">
       <!-- LEFT SIDEBAR -->
       <aside
-        class="flex h-screen flex-col border-r border-[#2a3142] bg-[#171923]"
+        :style="{
+          width: sidebarOpen ? `${sidebarWidth}px` : '0px',
+        }"
+        class="hidden lg:flex overflow-hidden transition-all duration-300 flex-col bg-[#171923]"
       >
         <div class="border-b border-[#2a3142] p-5">
           <h1 class="text-2xl font-semibold">FirstDraft</h1>
@@ -392,32 +503,102 @@ function animateObjects(target, source, field) {
           </div>
         </div>
       </aside>
+      <Transition name="fade">
+        <div
+          v-if="mobileMenuOpen"
+          class="fixed inset-0 z-50 bg-black/50 lg:hidden"
+          @click="mobileMenuOpen = false"
+        >
+          <aside class="h-full w-[280px] bg-[#171923]" @click.stop>
+            <div class="border-b border-[#2a3142] p-5">
+              <div class="flex items-center justify-between">
+                <h1 class="text-xl font-semibold">FirstDraft</h1>
+
+                <button @click="mobileMenuOpen = false">✕</button>
+              </div>
+            </div>
+
+            <div class="p-4">
+              <button
+                @click="createNewDraft"
+                class="w-full rounded-xl bg-violet-600 px-4 py-3"
+              >
+                New Draft
+              </button>
+            </div>
+
+            <div class="overflow-y-auto p-4">
+              <div
+                v-for="draft in draftStore.drafts"
+                :key="draft.id"
+                @click="
+                  openDraft(draft.id);
+                  mobileMenuOpen = false;
+                "
+                class="mb-3 cursor-pointer rounded-xl border border-[#2a3142] bg-[#1d2130] p-3"
+              >
+                {{ draft.title }}
+              </div>
+            </div>
+            <div
+              class="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-violet-500"
+              @mousedown="startDrag"
+            />
+          </aside>
+        </div>
+      </Transition>
 
       <!-- CHAT COLUMN -->
       <section
-        class="flex h-screen min-h-0 flex-col border-r border-[#2a3142] bg-[#11151f]"
+        :class="[
+          mobileTab !== 'chat' ? 'hidden lg:flex' : 'flex',
+          'h-full min-h-0 w-full lg:w-[450px] shrink-0 flex-col overflow-hidden border-r border-[#2a3142] bg-[#11151f]',
+        ]"
       >
         <!-- Header -->
         <div
           class="flex shrink-0 items-center justify-between border-b border-[#2a3142] p-4"
         >
-          <div>
-            <h2 class="font-semibold">
-              {{ draftStore.currentDraft?.title || "Untitled Draft" }}
-            </h2>
+          <div class="flex items-center gap-2">
+            <button
+              @click="sidebarOpen = !sidebarOpen"
+              class="hidden lg:flex rounded-lg border border-[#2a3142] p-2"
+            >
+              ☰
+            </button>
 
-            <p class="text-sm text-zinc-500">Start chatting</p>
+            <button
+              @click="mobileMenuOpen = true"
+              class="lg:hidden rounded-lg border border-[#2a3142] p-2"
+            >
+              ☰
+            </button>
+
+            <div>
+              <h2 class="font-semibold">
+                {{ draftStore.currentDraft?.title || "Untitled Draft" }}
+              </h2>
+
+              <p class="text-sm text-zinc-500">Start chatting</p>
+            </div>
           </div>
 
           <button
+            @click="exportPDF"
             class="rounded-xl border border-[#2a3142] px-4 py-2 transition hover:border-violet-500"
           >
-            Save
+            PDF
+          </button>
+          <button
+            @click="downloadWord"
+            class="rounded-xl border border-[#2a3142] px-4 py-2"
+          >
+            Word
           </button>
         </div>
 
         <!-- Messages -->
-        <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4">
+        <div ref="messagesContainer" class="min-h-0 flex-1 overflow-y-auto p-4">
           <template v-if="loadingMessages">
             <div
               v-for="i in 5"
@@ -472,214 +653,118 @@ function animateObjects(target, source, field) {
       </section>
 
       <!-- PREVIEW COLUMN -->
-      <section class="h-screen overflow-y-auto bg-[#0f1117] p-8">
+      <section
+        :class="[
+          mobileTab !== 'preview' ? 'hidden lg:block' : 'block',
+          'flex-1 overflow-y-auto bg-[#0f1117] p-4 lg:p-8',
+        ]"
+      >
         <div class="mx-auto w-full max-w-[900px]">
+          <!--selector -->
+          <div class="mb-4 flex gap-2">
+            <button
+              @click="selectedTemplate = 'modern'"
+              :class="
+                selectedTemplate === 'modern'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-[#171923] text-zinc-400'
+              "
+              class="rounded-xl px-4 py-2 transition"
+            >
+              Modern
+            </button>
+
+            <button
+              @click="selectedTemplate = 'corporate'"
+              :class="
+                selectedTemplate === 'corporate'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-[#171923] text-zinc-400'
+              "
+              class="rounded-xl px-4 py-2 transition"
+            >
+              Corporate
+            </button>
+
+            <button
+              @click="selectedTemplate = 'academic'"
+              :class="
+                selectedTemplate === 'academic'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-[#171923] text-zinc-400'
+              "
+              class="rounded-xl px-4 py-2 transition"
+            >
+              Academic CV
+            </button>
+          </div>
+          <!-- Progess Card-->
+          <div class="mb-6 rounded-2xl bg-[#171923] p-5">
+            <div class="mb-2 flex items-center justify-between">
+              <h3 class="font-semibold text-white">Document Progress</h3>
+
+              <span class="text-violet-400"> {{ progress.percentage }}% </span>
+            </div>
+
+            <div class="h-2 overflow-hidden rounded-full bg-[#2a3142]">
+              <div
+                class="h-full bg-violet-500 transition-all duration-500"
+                :style="{ width: `${progress.percentage}%` }"
+              />
+            </div>
+
+            <div class="mt-4 grid grid-cols-2 gap-2 text-sm">
+              <div>
+                {{ progress.sections.personalInfo ? "✓" : "✗" }}
+                Personal Info
+              </div>
+
+              <div>
+                {{ progress.sections.summary ? "✓" : "✗" }}
+                Summary
+              </div>
+
+              <div>
+                {{ progress.sections.experience ? "✓" : "✗" }}
+                Experience
+              </div>
+
+              <div>
+                {{ progress.sections.education ? "✓" : "✗" }}
+                Education
+              </div>
+
+              <div>
+                {{ progress.sections.skills ? "✓" : "✗" }}
+                Skills
+              </div>
+
+              <div>
+                {{ progress.sections.projects ? "✓" : "✗" }}
+                Projects
+              </div>
+            </div>
+          </div>
+
           <!-- A4 PAGE -->
           <div
-            class="min-h-[1123px] bg-white p-10 text-black shadow-2xl sm:p-12"
+            ref="previewRef"
+            class="mx-auto w-full max-w-[794px] bg-white p-6 text-black shadow-2xl sm:p-12"
           >
-            <!-- Header -->
-            <div class="border-b border-gray-300 pb-6">
-              <h1 class="text-3xl font-bold tracking-tight text-gray-900">
-                {{ documentContent.personalInfo.name || "Your Name" }}
-              </h1>
+            <ModernTemplate
+              v-if="selectedTemplate === 'modern'"
+              :document="documentContent"
+            />
 
-              <div
-                v-if="
-                  documentContent.personalInfo.email ||
-                  documentContent.personalInfo.phone ||
-                  documentContent.personalInfo.location ||
-                  documentContent.personalInfo.linkedin ||
-                  documentContent.personalInfo.website
-                "
-                class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500"
-              >
-                <span v-if="documentContent.personalInfo.email">
-                  {{ documentContent.personalInfo.email }}
-                </span>
+            <CorporateTemplate
+              v-else-if="selectedTemplate === 'corporate'"
+              :document="documentContent"
+            />
 
-                <span v-if="documentContent.personalInfo.phone">
-                  {{ documentContent.personalInfo.phone }}
-                </span>
-
-                <span v-if="documentContent.personalInfo.location">
-                  {{ documentContent.personalInfo.location }}
-                </span>
-
-                <span v-if="documentContent.personalInfo.linkedin">
-                  {{ documentContent.personalInfo.linkedin }}
-                </span>
-
-                <span v-if="documentContent.personalInfo.website">
-                  {{ documentContent.personalInfo.website }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Empty State -->
-            <div
-              v-if="
-                !documentContent.summary &&
-                !documentContent.experience?.length &&
-                !documentContent.education?.length &&
-                !documentContent.skills?.length &&
-                !documentContent.projects?.length &&
-                !documentContent.certifications?.length
-              "
-              class="flex min-h-[800px] items-center justify-center"
-            >
-              <div class="text-center">
-                <h2 class="text-2xl font-semibold text-gray-800">
-                  Your document will appear here
-                </h2>
-
-                <p class="mt-2 text-sm text-gray-500">
-                  Start chatting with FirstDraft to build your resume.
-                </p>
-              </div>
-            </div>
-
-            <!-- Summary -->
-            <section v-if="documentContent.summary" class="mt-8">
-              <h2
-                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
-              >
-                Professional Summary
-              </h2>
-
-              <p class="mt-3 text-sm leading-6 text-gray-700">
-                {{ documentContent.summary }}
-              </p>
-            </section>
-
-            <!-- Experience -->
-            <section v-if="documentContent.experience?.length" class="mt-8">
-              <h2
-                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
-              >
-                Experience
-              </h2>
-
-              <div
-                v-for="(job, index) in documentContent.experience"
-                :key="index"
-                class="mt-5"
-              >
-                <div class="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 class="font-semibold text-gray-900">
-                      {{ job.position }}
-                    </h3>
-
-                    <p class="text-sm text-gray-600">
-                      {{ job.company }}
-                    </p>
-                  </div>
-
-                  <span class="shrink-0 text-sm text-gray-500">
-                    {{ job.date }}
-                  </span>
-                </div>
-
-                <p
-                  v-if="job.description"
-                  class="mt-2 text-sm leading-6 text-gray-700"
-                >
-                  {{ job.description }}
-                </p>
-              </div>
-            </section>
-
-            <!-- Education -->
-            <section v-if="documentContent.education?.length" class="mt-8">
-              <h2
-                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
-              >
-                Education
-              </h2>
-
-              <div
-                v-for="(education, index) in documentContent.education"
-                :key="index"
-                class="mt-5"
-              >
-                <div class="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 class="font-semibold text-gray-900">
-                      {{ education.degree }}
-                    </h3>
-
-                    <p class="text-sm text-gray-600">
-                      {{ education.school }}
-                    </p>
-                  </div>
-
-                  <span class="shrink-0 text-sm text-gray-500">
-                    {{ education.date }}
-                  </span>
-                </div>
-              </div>
-            </section>
-
-            <!-- Skills -->
-            <section v-if="documentContent.skills?.length" class="mt-8">
-              <h2
-                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
-              >
-                Skills
-              </h2>
-
-              <p class="mt-3 text-sm leading-6 text-gray-700">
-                {{ documentContent.skills.join(" • ") }}
-              </p>
-            </section>
-
-            <!-- Projects -->
-            <section v-if="documentContent.projects?.length" class="mt-8">
-              <h2
-                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
-              >
-                Projects
-              </h2>
-
-              <div
-                v-for="(project, index) in documentContent.projects"
-                :key="index"
-                class="mt-5"
-              >
-                <h3 class="font-semibold text-gray-900">
-                  {{ project.name }}
-                </h3>
-
-                <p
-                  v-if="project.description"
-                  class="mt-1 text-sm leading-6 text-gray-700"
-                >
-                  {{ project.description }}
-                </p>
-              </div>
-            </section>
-
-            <!-- Certifications -->
-            <section v-if="documentContent.certifications?.length" class="mt-8">
-              <h2
-                class="border-b border-gray-300 pb-2 text-sm font-bold uppercase tracking-widest text-gray-800"
-              >
-                Certifications
-              </h2>
-
-              <ul class="mt-3 space-y-2">
-                <li
-                  v-for="(
-                    certification, index
-                  ) in documentContent.certifications"
-                  :key="index"
-                  class="text-sm text-gray-700"
-                >
-                  {{ certification }}
-                </li>
-              </ul>
-            </section>
+            <AcademicTemplate
+              v-else-if="selectedTemplate === 'academic'"
+              :document="documentContent"
+            />
           </div>
         </div>
       </section>

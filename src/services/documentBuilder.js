@@ -23,6 +23,9 @@ const emptyDocument = {
   certifications: [],
 
   achievements: [],
+
+  research: [],
+  publications: [],
 };
 
 export function createEmptyDocument(documentType = "resume") {

@@ -160,5 +160,13 @@ export const useDraftStore = defineStore("draft", {
 
       return data;
     },
+    async updateTemplate(id, template) {
+      const { error } = await supabase
+        .from("drafts")
+        .update({ template })
+        .eq("id", id);
+
+      if (error) throw error;
+    },
   },
 });

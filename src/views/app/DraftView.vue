@@ -454,12 +454,7 @@ function animateObjects(target, source, field) {
 }
 </script>
 <template>
-  <div class="h-screen overflow-hidden bg-[#0f1117] text-white">
-    <div class="flex lg:hidden">
-      <button @click="mobileTab = 'chat'" class="flex-1 p-3">Chat</button>
-
-      <button @click="mobileTab = 'preview'" class="flex-1 p-3">Preview</button>
-    </div>
+  <div class="min-h-screen bg-[#0f1117] text-white">
     <div class="flex h-[calc(100vh-48px)]">
       <!-- LEFT SIDEBAR -->
       <aside
@@ -556,10 +551,8 @@ function animateObjects(target, source, field) {
         ]"
       >
         <!-- Header -->
-        <div
-          class="flex shrink-0 items-center justify-between border-b border-[#2a3142] p-4"
-        >
-          <div class="flex items-center gap-2">
+        <div class="shrink-0 border-b border-[#2a3142]">
+          <div class="flex items-center justify-between p-4">
             <button
               @click="sidebarOpen = !sidebarOpen"
               class="hidden lg:flex rounded-lg border border-[#2a3142] p-2"
@@ -574,27 +567,45 @@ function animateObjects(target, source, field) {
               ☰
             </button>
 
-            <div>
-              <h2 class="font-semibold">
-                {{ draftStore.currentDraft?.title || "Untitled Draft" }}
-              </h2>
+            <div class="flex items-center gap-2">
+              <button
+                @click="exportPDF"
+                class="rounded-xl border border-[#2a3142] px-4 py-2"
+              >
+                PDF
+              </button>
 
-              <p class="text-sm text-zinc-500">Start chatting</p>
+              <button
+                @click="downloadWord"
+                class="rounded-xl border border-[#2a3142] px-4 py-2"
+              >
+                Word
+              </button>
             </div>
           </div>
 
-          <button
-            @click="exportPDF"
-            class="rounded-xl border border-[#2a3142] px-4 py-2 transition hover:border-violet-500"
-          >
-            PDF
-          </button>
-          <button
-            @click="downloadWord"
-            class="rounded-xl border border-[#2a3142] px-4 py-2"
-          >
-            Word
-          </button>
+          <!-- MOBILE CHAT/PREVIEW TABS -->
+          <div class="flex lg:hidden border-t border-[#2a3142]">
+            <button
+              @click="mobileTab = 'chat'"
+              :class="
+                mobileTab === 'chat' ? 'text-violet-400' : 'text-zinc-400'
+              "
+              class="flex-1 py-3 text-sm font-medium"
+            >
+              Chat
+            </button>
+
+            <button
+              @click="mobileTab = 'preview'"
+              :class="
+                mobileTab === 'preview' ? 'text-violet-400' : 'text-zinc-400'
+              "
+              class="flex-1 py-3 text-sm font-medium"
+            >
+              Preview
+            </button>
+          </div>
         </div>
 
         <!-- Messages -->

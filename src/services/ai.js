@@ -3,53 +3,38 @@ import { supabase } from "@/lib/supabase";
 import { normalizeDocument } from "@/services/documentBuilder";
 
 // All AI calls go through the `firstdraft-ai` Supabase Edge Function so the
-// Gemini API key never reaches the browser.
+// Gemini API key never reaches the browser. One call per user message returns
+// the reply, the updated document and quick-reply suggestions together.
 // See supabase/functions/firstdraft-ai/index.ts.
 
 const FUNCTION_NAME = "firstdraft-ai";
+const HISTORY_MESSAGES = 10;
 
-async function callAI(body) {
+export async function chatTurn(messages, document) {
+  const history = messages
+    .filter((m) => !m.pending && !m.failed && m.content?.trim())
+    .slice(-HISTORY_MESSAGES)
+    .map(({ role, content }) => ({ role, content }));
+
   const { data, error } = await supabase.functions.invoke(FUNCTION_NAME, {
-    body,
+    body: { action: "turn", messages: history, document },
   });
 
   if (error) {
-    let message = "Couldn't reach FirstDraft's AI. Please try again.";
-
+    let message = "Couldn't reach FirstDraft. Check your connection and try again.";
     if (error instanceof FunctionsHttpError) {
       const details = await error.context.json().catch(() => null);
       if (details?.error) message = details.error;
     }
-
     throw new Error(message);
   }
 
   if (data?.error) throw new Error(data.error);
 
-  return data;
-}
-
-function toPayload(messages) {
-  return messages
-    .filter((m) => !m.pending && !m.failed && m.content?.trim())
-    .map(({ role, content }) => ({ role, content }));
-}
-
-export async function sendToAI(messages) {
-  const data = await callAI({
-    action: "chat",
-    messages: toPayload(messages),
-  });
-
-  return { role: "assistant", content: data.content };
-}
-
-export async function extractDocument(messages, documentType = "resume") {
-  const data = await callAI({
-    action: "extract",
-    documentType,
-    messages: toPayload(messages),
-  });
-
-  return normalizeDocument(data.document);
+  return {
+    reply: data.reply?.trim() || "Done — take a look at the preview.",
+    document: data.document ? normalizeDocument(data.document, document?.documentType) : null,
+    suggestions: data.suggestions || [],
+    usage: data.usage || null,
+  };
 }

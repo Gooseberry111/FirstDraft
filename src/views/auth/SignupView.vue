@@ -52,10 +52,10 @@ async function handleSignup() {
     subtitle="One last step before you start writing."
   >
     <div class="card p-6">
-      <MailCheck :size="28" class="text-violet-400" />
-      <p class="mt-4 text-zinc-300">
+      <MailCheck :size="28" class="text-brand-600" />
+      <p class="mt-4 text-ink-2">
         We sent a confirmation link to
-        <span class="font-medium text-white">{{ confirmationSentTo }}</span>.
+        <span class="font-medium text-ink">{{ confirmationSentTo }}</span>.
         Open it to activate your account, then sign in.
       </p>
     </div>
@@ -101,7 +101,7 @@ async function handleSignup() {
       <p
         v-if="errorMessage"
         role="alert"
-        class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+        class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
       >
         {{ errorMessage }}
       </p>
@@ -115,7 +115,7 @@ async function handleSignup() {
 
     <p class="mt-8 text-center text-sm text-muted">
       Already have an account?
-      <RouterLink to="/login" class="font-medium text-violet-400 hover:text-violet-300">
+      <RouterLink to="/login" class="font-medium text-brand-600 hover:text-brand-700">
         Sign in
       </RouterLink>
     </p>

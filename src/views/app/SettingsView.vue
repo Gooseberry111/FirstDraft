@@ -41,11 +41,11 @@ async function changePassword() {
 
 <template>
   <div class="mx-auto max-w-3xl px-4 py-8 sm:px-6 md:px-10 md:py-12">
-    <h1 class="text-3xl font-semibold tracking-tight text-white">Settings</h1>
+    <h1 class="text-3xl font-semibold tracking-tight text-ink">Settings</h1>
     <p class="mt-2 text-muted">Manage your account security.</p>
 
     <section class="card mt-8 p-6">
-      <h2 class="font-semibold text-white">Change password</h2>
+      <h2 class="font-semibold text-ink">Change password</h2>
       <p class="mt-1 text-sm text-muted">Use at least {{ MIN_PASSWORD }} characters.</p>
 
       <form class="mt-6 grid gap-5 sm:max-w-sm" @submit.prevent="changePassword">
@@ -77,8 +77,8 @@ async function changePassword() {
           </div>
         </div>
 
-        <p v-if="error" role="alert" class="text-sm text-red-300">{{ error }}</p>
-        <p v-if="saved" role="status" class="flex items-center gap-2 text-sm text-emerald-400">
+        <p v-if="error" role="alert" class="text-sm text-red-700">{{ error }}</p>
+        <p v-if="saved" role="status" class="flex items-center gap-2 text-sm text-emerald-600">
           <Check :size="16" /> Password updated.
         </p>
 

@@ -4,20 +4,33 @@ export default {
   theme: {
     extend: {
       colors: {
-        canvas: "#0b0d12",
-        surface: "#12151c",
-        raised: "#1a1e28",
-        line: "#272c38",
-        "line-strong": "#363c4b",
-        muted: "#8f97aa",
-        faint: "#5d6476",
+        // Light & clean palette
+        canvas: "#f6f6f4", // app background
+        surface: "#ffffff", // panels, cards
+        subtle: "#f1f1ef", // hover, inputs, chips
+        line: "#e6e6e3", // borders
+        "line-strong": "#d6d6d2",
+        ink: "#1c1c1f", // primary text
+        "ink-2": "#4a4a52", // secondary text
+        muted: "#76767f", // tertiary text
+        faint: "#a3a3ab", // placeholders
+        brand: {
+          50: "#f3f0ff",
+          100: "#e9e3ff",
+          200: "#d4c9ff",
+          500: "#7c5cf5",
+          600: "#6a43ee",
+          700: "#5833d6",
+        },
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
         serif: ["Source Serif 4", "Georgia", "Cambria", "serif"],
       },
       boxShadow: {
-        paper: "0 1px 2px rgb(0 0 0 / 0.3), 0 24px 48px -12px rgb(0 0 0 / 0.6)",
+        card: "0 1px 2px rgb(16 16 20 / 0.04), 0 1px 3px rgb(16 16 20 / 0.06)",
+        pop: "0 4px 12px -2px rgb(16 16 20 / 0.08), 0 2px 4px -2px rgb(16 16 20 / 0.05)",
+        paper: "0 1px 3px rgb(16 16 20 / 0.06), 0 12px 32px -8px rgb(16 16 20 / 0.12)",
       },
       keyframes: {
         "fade-up": {

@@ -46,27 +46,23 @@ const icons = { resume: FileText, cv: GraduationCap, cover_letter: Mail, essay: 
         :key="draft.id"
         :to="`/app/draft/${draft.id}`"
         :aria-current="draft.id === activeId ? 'page' : undefined"
-        :class="
-          draft.id === activeId
-            ? 'bg-raised text-white'
-            : 'text-zinc-400 hover:bg-raised/60 hover:text-zinc-100'
-        "
+        :class="draft.id === activeId ? 'bg-brand-50 text-ink' : 'text-ink-2 hover:bg-subtle'"
         class="flex items-start gap-2.5 rounded-lg px-3 py-2.5 transition"
         @click="$emit('close')"
       >
         <component
           :is="icons[draft.document_data?.documentType] || FileText"
           :size="16"
-          :class="draft.id === activeId ? 'text-violet-400' : 'text-faint'"
+          :class="draft.id === activeId ? 'text-brand-600' : 'text-faint'"
           class="mt-0.5 shrink-0"
         />
         <span class="min-w-0">
-          <span class="block truncate text-sm">{{ draft.title || "Untitled Draft" }}</span>
-          <span class="block text-xs text-faint">{{ relativeTime(draft.updated_at || draft.created_at) }}</span>
+          <span class="block truncate text-sm font-medium">{{ draft.title || "Untitled Draft" }}</span>
+          <span class="block text-xs text-muted">{{ relativeTime(draft.updated_at || draft.created_at) }}</span>
         </span>
       </RouterLink>
 
-      <p v-if="!drafts.length" class="px-3 py-2 text-sm text-faint">No drafts yet</p>
+      <p v-if="!drafts.length" class="px-3 py-2 text-sm text-muted">No drafts yet</p>
     </nav>
   </div>
 </template>

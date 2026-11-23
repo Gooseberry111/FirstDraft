@@ -73,7 +73,7 @@ async function handleLogin() {
       <p
         v-if="errorMessage"
         role="alert"
-        class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+        class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
       >
         {{ errorMessage }}
       </p>
@@ -87,7 +87,7 @@ async function handleLogin() {
 
     <p class="mt-8 text-center text-sm text-muted">
       Don't have an account?
-      <RouterLink to="/signup" class="font-medium text-violet-400 hover:text-violet-300">
+      <RouterLink to="/signup" class="font-medium text-brand-600 hover:text-brand-700">
         Create one
       </RouterLink>
     </p>

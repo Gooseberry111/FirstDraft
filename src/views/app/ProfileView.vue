@@ -30,18 +30,18 @@ async function signOut() {
 
 <template>
   <div class="mx-auto max-w-3xl px-4 py-8 sm:px-6 md:px-10 md:py-12">
-    <h1 class="text-3xl font-semibold tracking-tight text-white">Profile</h1>
+    <h1 class="text-3xl font-semibold tracking-tight text-ink">Profile</h1>
     <p class="mt-2 text-muted">Your FirstDraft account.</p>
 
     <section class="card mt-8 p-6">
       <div class="flex items-center gap-4">
         <span
-          class="grid h-14 w-14 place-items-center rounded-full bg-violet-600/20 text-xl font-semibold uppercase text-violet-300"
+          class="grid h-14 w-14 place-items-center rounded-full bg-brand-100 text-xl font-semibold uppercase text-brand-700"
         >
           {{ auth.user?.email?.[0] || "?" }}
         </span>
         <div class="min-w-0">
-          <p class="truncate text-lg font-medium text-white">{{ auth.user?.email }}</p>
+          <p class="truncate text-lg font-medium text-ink">{{ auth.user?.email }}</p>
           <p class="text-sm text-muted">Signed in</p>
         </div>
       </div>
@@ -51,21 +51,21 @@ async function signOut() {
           <Mail :size="18" class="mt-0.5 text-faint" />
           <div class="min-w-0">
             <dt class="text-sm text-muted">Email</dt>
-            <dd class="truncate text-zinc-100">{{ auth.user?.email }}</dd>
+            <dd class="truncate text-ink">{{ auth.user?.email }}</dd>
           </div>
         </div>
         <div class="flex items-start gap-3">
           <CalendarDays :size="18" class="mt-0.5 text-faint" />
           <div>
             <dt class="text-sm text-muted">Member since</dt>
-            <dd class="text-zinc-100">{{ memberSince }}</dd>
+            <dd class="text-ink">{{ memberSince }}</dd>
           </div>
         </div>
         <div class="flex items-start gap-3">
           <FileText :size="18" class="mt-0.5 text-faint" />
           <div>
             <dt class="text-sm text-muted">Drafts</dt>
-            <dd class="text-zinc-100">{{ draftStore.drafts.length }}</dd>
+            <dd class="text-ink">{{ draftStore.drafts.length }}</dd>
           </div>
         </div>
       </dl>

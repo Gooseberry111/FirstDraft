@@ -28,6 +28,19 @@ supabase functions deploy firstdraft-ai
 
 To use a different model, run `supabase secrets set GEMINI_MODEL=<model-id>`.
 
+#### Keeping within the free Gemini quota
+
+- Each chat message makes **one** Gemini request. It returns the reply, the document update and the quick-reply suggestions together.
+- Only the current document and the last 10 messages are sent, so requests stay small however long the chat gets.
+- Choosing a document type and editing the document by hand never call the AI.
+- Every user has a daily message limit, stored in the `ai_usage` table (migration in `supabase/migrations`). You can adjust the limits with secrets:
+
+| Secret | Default | Meaning |
+| --- | --- | --- |
+| `AI_USER_DAILY_LIMIT` | `60` | Messages per user per day (`0` = unlimited) |
+| `AI_GLOBAL_DAILY_LIMIT` | `0` | Messages per day across the whole app (`0` = unlimited) |
+| `GEMINI_FALLBACK_MODEL` | none | A second model to try when the main one is rate-limited. Each model has its own free quota. |
+
 ### 3. Database
 
 The app expects two tables, both with Row Level Security enabled so each user can only see their own data:

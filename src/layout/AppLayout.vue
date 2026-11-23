@@ -1,15 +1,7 @@
 <script setup>
 import { ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  LayoutDashboard,
-  User,
-  Settings,
-  Plus,
-  LogOut,
-  Menu,
-  X,
-} from "lucide-vue-next";
+import { LayoutDashboard, User, Settings, Plus, LogOut, Menu, X } from "lucide-vue-next";
 import BrandMark from "@/components/BrandMark.vue";
 import { useAuthStore } from "@/stores/auth";
 
@@ -36,59 +28,45 @@ async function signOut() {
 </script>
 
 <template>
-  <div class="flex min-h-full bg-canvas text-zinc-100">
+  <div class="flex min-h-full bg-canvas text-ink">
     <!-- Mobile top bar -->
-    <header
-      class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-canvas/90 px-4 backdrop-blur md:hidden"
-    >
-      <RouterLink to="/app/dashboard" aria-label="FirstDraft home">
-        <BrandMark />
-      </RouterLink>
+    <header class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur md:hidden">
+      <RouterLink to="/app/dashboard" aria-label="FirstDraft home"><BrandMark /></RouterLink>
       <button class="icon-btn" aria-label="Open menu" @click="mobileNavOpen = true">
         <Menu :size="20" />
       </button>
     </header>
 
     <Transition name="fade">
-      <div
-        v-if="mobileNavOpen"
-        class="fixed inset-0 z-40 bg-black/60 md:hidden"
-        @click="mobileNavOpen = false"
-      />
+      <div v-if="mobileNavOpen" class="fixed inset-0 z-40 bg-black/30 md:hidden" @click="mobileNavOpen = false" />
     </Transition>
 
     <!-- Sidebar -->
     <aside
-      :class="mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
-      class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-surface transition-transform duration-200 md:sticky md:top-0 md:h-screen"
+      :class="mobileNavOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'"
+      class="fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-line bg-surface transition-transform duration-200 md:sticky md:top-0 md:h-screen"
     >
       <div class="flex h-16 items-center justify-between px-5">
-        <RouterLink to="/app/dashboard" aria-label="FirstDraft home">
-          <BrandMark />
-        </RouterLink>
-        <button
-          class="icon-btn md:hidden"
-          aria-label="Close menu"
-          @click="mobileNavOpen = false"
-        >
+        <RouterLink to="/app/dashboard" aria-label="FirstDraft home"><BrandMark /></RouterLink>
+        <button class="icon-btn md:hidden" aria-label="Close menu" @click="mobileNavOpen = false">
           <X :size="18" />
         </button>
       </div>
 
-      <div class="px-4 pt-2">
-        <RouterLink to="/app/draft/new" class="btn-primary w-full py-3">
+      <div class="px-3 pt-1">
+        <RouterLink to="/app/draft/new" class="btn-primary w-full">
           <Plus :size="18" />
           New draft
         </RouterLink>
       </div>
 
-      <nav class="mt-6 flex-1 space-y-1 px-3" aria-label="Main">
+      <nav class="mt-5 flex-1 space-y-0.5 px-3" aria-label="Main">
         <RouterLink
           v-for="item in nav"
           :key="item.to"
           :to="item.to"
-          class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted transition hover:bg-raised hover:text-zinc-100"
-          active-class="!bg-raised !text-white"
+          class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-ink-2 transition hover:bg-subtle hover:text-ink"
+          active-class="!bg-brand-50 !text-brand-700"
         >
           <component :is="item.icon" :size="18" />
           {{ item.label }}
@@ -96,15 +74,11 @@ async function signOut() {
       </nav>
 
       <div class="border-t border-line p-3">
-        <div class="flex items-center gap-3 rounded-xl px-3 py-2">
-          <span
-            class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-600/20 text-sm font-semibold uppercase text-violet-300"
-          >
+        <div class="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
+          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-100 text-sm font-semibold uppercase text-brand-700">
             {{ auth.user?.email?.[0] || "?" }}
           </span>
-          <span class="min-w-0 flex-1 truncate text-sm text-zinc-300">
-            {{ auth.user?.email }}
-          </span>
+          <span class="min-w-0 flex-1 truncate text-sm text-ink-2">{{ auth.user?.email }}</span>
           <button class="icon-btn" aria-label="Sign out" title="Sign out" @click="signOut">
             <LogOut :size="17" />
           </button>

@@ -1,29 +1,19 @@
 <script setup>
-import { computed } from "vue";
-import ModernTemplate from "./ModernTemplate.vue";
-import CorporateTemplate from "./CorporateTemplate.vue";
-import AcademicTemplate from "./AcademicTemplate.vue";
+import ResumeTemplate from "./ResumeTemplate.vue";
 import LetterTemplate from "./LetterTemplate.vue";
+import { provideEditing } from "./editing";
 import { isProseDocument } from "@/services/documentBuilder";
 
 const props = defineProps({
   document: { type: Object, required: true },
   template: { type: String, default: "modern" },
+  editable: { type: Boolean, default: false },
 });
 
-const templates = {
-  modern: ModernTemplate,
-  corporate: CorporateTemplate,
-  academic: AcademicTemplate,
-};
-
-const component = computed(() =>
-  isProseDocument(props.document.documentType)
-    ? LetterTemplate
-    : templates[props.template] || ModernTemplate,
-);
+provideEditing(props.editable);
 </script>
 
 <template>
-  <component :is="component" :document="document" />
+  <LetterTemplate v-if="isProseDocument(document.documentType)" :document="document" />
+  <ResumeTemplate v-else :document="document" :variant="template" />
 </template>

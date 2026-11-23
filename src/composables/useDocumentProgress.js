@@ -1,35 +1,43 @@
 export function useDocumentProgress(document) {
-  let completed = 0;
-  let total = 6;
+  const doc = document || {};
+  const info = doc.personalInfo || {};
+  const hasContact = !!(info.name || info.email || info.phone);
 
-  const hasPersonalInfo =
-    document.personalInfo?.name ||
-    document.personalInfo?.email ||
-    document.personalInfo?.phone;
+  let sections;
 
-  if (hasPersonalInfo) completed++;
+  if (doc.documentType === "cover_letter") {
+    sections = [
+      { label: "Your details", done: hasContact },
+      { label: "Recipient", done: !!doc.recipient },
+      { label: "Letter body", done: doc.body?.length > 0 },
+      { label: "Sign-off", done: !!doc.closing },
+    ];
+  } else if (doc.documentType === "essay") {
+    sections = [
+      { label: "Title", done: !!doc.title },
+      { label: "Draft started", done: doc.body?.length > 0 },
+      { label: "Full draft", done: doc.body?.length >= 4 },
+    ];
+  } else {
+    sections = [
+      { label: "Personal info", done: hasContact },
+      { label: "Summary", done: !!doc.summary },
+      { label: "Experience", done: doc.experience?.length > 0 },
+      { label: "Education", done: doc.education?.length > 0 },
+      { label: "Skills", done: doc.skills?.length > 0 },
+      doc.documentType === "cv"
+        ? {
+            label: "Research & publications",
+            done: doc.research?.length > 0 || doc.publications?.length > 0,
+          }
+        : { label: "Projects", done: doc.projects?.length > 0 },
+    ];
+  }
 
-  if (document.summary) completed++;
-
-  if (document.experience?.length) completed++;
-
-  if (document.education?.length) completed++;
-
-  if (document.skills?.length) completed++;
-
-  if (document.projects?.length) completed++;
-
-  const percentage = Math.round((completed / total) * 100);
+  const completed = sections.filter((s) => s.done).length;
 
   return {
-    percentage,
-    sections: {
-      personalInfo: !!hasPersonalInfo,
-      summary: !!document.summary,
-      experience: document.experience?.length > 0,
-      education: document.education?.length > 0,
-      skills: document.skills?.length > 0,
-      projects: document.projects?.length > 0,
-    },
+    percentage: Math.round((completed / sections.length) * 100),
+    sections,
   };
 }

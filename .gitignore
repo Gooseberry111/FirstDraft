@@ -23,4 +23,12 @@ dist-ssr
 *.sln
 *.sw?
 
+
+# Local env files
 .env
+.env.*
+!.env.example
+
+# Supabase CLI
+supabase/.temp
+supabase/.branches

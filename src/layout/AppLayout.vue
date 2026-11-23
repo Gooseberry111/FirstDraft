@@ -1,67 +1,119 @@
 <script setup>
+import { ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import {
   LayoutDashboard,
-  FileText,
   User,
   Settings,
   Plus,
+  LogOut,
+  Menu,
+  X,
 } from "lucide-vue-next";
+import BrandMark from "@/components/BrandMark.vue";
+import { useAuthStore } from "@/stores/auth";
 
-import { RouterLink, RouterView } from "vue-router";
+const auth = useAuthStore();
+const route = useRoute();
+const router = useRouter();
+const mobileNavOpen = ref(false);
+
+const nav = [
+  { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/app/profile", label: "Profile", icon: User },
+  { to: "/app/settings", label: "Settings", icon: Settings },
+];
+
+watch(
+  () => route.fullPath,
+  () => (mobileNavOpen.value = false),
+);
+
+async function signOut() {
+  await auth.signOut();
+  router.replace("/login");
+}
 </script>
 
 <template>
-  <div class="min-h-screen bg-zinc-950 text-white">
-    <div class="flex">
-      <!-- Sidebar -->
-      <aside
-        class="hidden md:flex w-72 flex-col border-r border-zinc-800 h-screen sticky top-0"
-      >
-        <div class="p-6">
-          <h1 class="text-2xl font-semibold tracking-tight">FirstDraft</h1>
+  <div class="flex min-h-full bg-canvas text-zinc-100">
+    <!-- Mobile top bar -->
+    <header
+      class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-canvas/90 px-4 backdrop-blur md:hidden"
+    >
+      <RouterLink to="/app/dashboard" aria-label="FirstDraft home">
+        <BrandMark />
+      </RouterLink>
+      <button class="icon-btn" aria-label="Open menu" @click="mobileNavOpen = true">
+        <Menu :size="20" />
+      </button>
+    </header>
+
+    <Transition name="fade">
+      <div
+        v-if="mobileNavOpen"
+        class="fixed inset-0 z-40 bg-black/60 md:hidden"
+        @click="mobileNavOpen = false"
+      />
+    </Transition>
+
+    <!-- Sidebar -->
+    <aside
+      :class="mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
+      class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-surface transition-transform duration-200 md:sticky md:top-0 md:h-screen"
+    >
+      <div class="flex h-16 items-center justify-between px-5">
+        <RouterLink to="/app/dashboard" aria-label="FirstDraft home">
+          <BrandMark />
+        </RouterLink>
+        <button
+          class="icon-btn md:hidden"
+          aria-label="Close menu"
+          @click="mobileNavOpen = false"
+        >
+          <X :size="18" />
+        </button>
+      </div>
+
+      <div class="px-4 pt-2">
+        <RouterLink to="/app/draft/new" class="btn-primary w-full py-3">
+          <Plus :size="18" />
+          New draft
+        </RouterLink>
+      </div>
+
+      <nav class="mt-6 flex-1 space-y-1 px-3" aria-label="Main">
+        <RouterLink
+          v-for="item in nav"
+          :key="item.to"
+          :to="item.to"
+          class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted transition hover:bg-raised hover:text-zinc-100"
+          active-class="!bg-raised !text-white"
+        >
+          <component :is="item.icon" :size="18" />
+          {{ item.label }}
+        </RouterLink>
+      </nav>
+
+      <div class="border-t border-line p-3">
+        <div class="flex items-center gap-3 rounded-xl px-3 py-2">
+          <span
+            class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-600/20 text-sm font-semibold uppercase text-violet-300"
+          >
+            {{ auth.user?.email?.[0] || "?" }}
+          </span>
+          <span class="min-w-0 flex-1 truncate text-sm text-zinc-300">
+            {{ auth.user?.email }}
+          </span>
+          <button class="icon-btn" aria-label="Sign out" title="Sign out" @click="signOut">
+            <LogOut :size="17" />
+          </button>
         </div>
+      </div>
+    </aside>
 
-        <div class="px-4">
-          <RouterLink
-            to="/app/draft/new"
-            class="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-black font-medium transition hover:scale-[1.02]"
-          >
-            <Plus :size="18" />
-            New Draft
-          </RouterLink>
-        </div>
-
-        <nav class="mt-8 flex-1 px-3">
-          <RouterLink
-            to="/app/dashboard"
-            class="mb-2 flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-zinc-900"
-          >
-            <LayoutDashboard :size="18" />
-            Dashboard
-          </RouterLink>
-
-          <RouterLink
-            to="/app/profile"
-            class="mb-2 flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-zinc-900"
-          >
-            <User :size="18" />
-            Profile
-          </RouterLink>
-
-          <RouterLink
-            to="/app/settings"
-            class="flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-zinc-900"
-          >
-            <Settings :size="18" />
-            Settings
-          </RouterLink>
-        </nav>
-      </aside>
-
-      <!-- Main -->
-      <main class="flex-1 min-h-screen">
-        <RouterView />
-      </main>
-    </div>
+    <main class="min-w-0 flex-1 pt-14 md:pt-0">
+      <RouterView />
+    </main>
   </div>
 </template>

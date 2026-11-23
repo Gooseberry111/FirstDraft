@@ -1,784 +1,781 @@
 <script setup>
-import { ref, onMounted, nextTick } from "vue";
-import { Send, Save } from "lucide-vue-next";
-import { useRouter, useRoute } from "vue-router";
+import { computed, nextTick, onBeforeUnmount, ref, toRaw, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import {
+  AlertCircle,
+  ArrowUp,
+  Check,
+  FileDown,
+  FileText,
+  Loader2,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  RotateCcw,
+} from "lucide-vue-next";
+
+import EditorSidebar from "@/components/editor/EditorSidebar.vue";
+import DocumentRenderer from "@/components/templates/DocumentRenderer.vue";
 import { useDraftStore } from "@/stores/draft";
 import { sendToAI, extractDocument } from "@/services/ai";
-import { createEmptyDocument } from "@/services/documentBuilder";
-import { computed } from "vue";
+import {
+  DOCUMENT_TYPES,
+  createEmptyDocument,
+  isDocumentEmpty,
+  isProseDocument,
+  normalizeDocument,
+} from "@/services/documentBuilder";
 import { useDocumentProgress } from "@/composables/useDocumentProgress";
-import ModernTemplate from "@/components/templates/ModernTemplate.vue";
-import CorporateTemplate from "@/components/templates/CorporateTemplate.vue";
-import AcademicTemplate from "@/components/templates/AcademicTemplate.vue";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
-import { Document, Packer, Paragraph, TextRun } from "docx";
-import { saveAs } from "file-saver";
-import { exportWord } from "../../services/exportWord";
+import { formatMessage, safeFileName } from "@/utils/format";
 
-const loadingMessages = ref(true);
-const messagesContainer = ref(null);
-const progress = computed(() => useDocumentProgress(documentContent.value));
-const router = useRouter();
+const PAGE_WIDTH = 794; // A4 at 96dpi
+const PAGE_HEIGHT = 1123;
+const UNTITLED = "Untitled Draft";
+
+const TEMPLATES = [
+  { id: "modern", label: "Modern" },
+  { id: "corporate", label: "Corporate" },
+  { id: "academic", label: "Academic" },
+];
+
 const route = useRoute();
+const router = useRouter();
 const draftStore = useDraftStore();
-const selectedTemplate = ref("modern");
-const message = ref("");
+
+// ---------- State ----------
+const draftId = ref("");
+const loading = ref(true);
+const loadError = ref("");
+
 const messages = ref([]);
-const sidebarOpen = ref(true);
-const mobileMenuOpen = ref(false);
-const sidebarWidth = ref(280);
-const isDragging = ref(false);
+const message = ref("");
+const isSending = ref(false);
+
+// `latestDocument` is the real data (saved + exported); `documentContent` is the
+// on-screen copy that types itself in.
+const latestDocument = ref(createEmptyDocument());
+const documentContent = ref(createEmptyDocument());
+const isUpdatingPreview = ref(false);
+const previewError = ref("");
+
+const selectedTemplate = ref("modern");
+const templateChosenByUser = ref(false);
+
 const mobileTab = ref("chat");
+const mobileMenuOpen = ref(false);
+const sidebarOpen = ref(readPref("fd.sidebarOpen", true));
+const sidebarWidth = ref(readPref("fd.sidebarWidth", 264));
+const isDragging = ref(false);
 
-const documentContent = ref(createEmptyDocument("resume"));
+const editingTitle = ref(false);
+const titleDraft = ref("");
+const exportingWord = ref(false);
 
-async function downloadWord() {
-  await exportWord(documentContent.value);
-}
-const previewRef = ref(null);
+const messagesContainer = ref(null);
+const textareaRef = ref(null);
+const titleInput = ref(null);
+const pageContainer = ref(null);
+const pageRef = ref(null);
+const pageScale = ref(1);
+const pageHeight = ref(PAGE_HEIGHT);
 
-async function exportPDF() {
-  const element = previewRef.value;
+const draft = computed(() => draftStore.currentDraft);
+const title = computed(() => draft.value?.title || UNTITLED);
+const docType = computed(() => latestDocument.value.documentType);
+const isProse = computed(() => isProseDocument(docType.value));
+const progress = computed(() => useDocumentProgress(latestDocument.value));
+const isEmpty = computed(() => isDocumentEmpty(documentContent.value));
+const canSend = computed(() => !!message.value.trim() && !isSending.value && !loading.value);
 
-  const canvas = await html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-  });
-
-  const imgData = canvas.toDataURL("image/png");
-
-  const pdf = new jsPDF("p", "mm", "a4");
-
-  const pdfWidth = 210;
-  const pdfHeight = 297;
-
-  const imgWidth = pdfWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  let heightLeft = imgHeight;
-  let position = 0;
-
-  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-
-  heightLeft -= pdfHeight;
-
-  while (heightLeft > 0) {
-    position = heightLeft - imgHeight;
-
-    pdf.addPage();
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-
-    heightLeft -= pdfHeight;
-  }
-
-  pdf.save("FirstDraft.pdf");
-}
-
-const createNewDraft = async () => {
+// ---------- Preferences (per browser, best effort) ----------
+function readPref(key, fallback) {
   try {
-    const draft = await draftStore.createDraft();
-
-    draftStore.currentDraft = draft;
-
-    const welcomeMessage = {
-      role: "assistant",
-      content:
-        "Hi! What would you like to create today?\n\n• CV\n• Resume\n• Cover Letter\n• Essay",
-    };
-
-    messages.value = [welcomeMessage];
-
-    await draftStore.addMessage(draft.id, "assistant", welcomeMessage.content);
-
-    await draftStore.fetchDrafts();
-
-    router.push(`/app/draft/${draft.id}`);
-  } catch (error) {
-    console.error("Failed to create draft:", error);
+    const value = localStorage.getItem(key);
+    return value == null ? fallback : JSON.parse(value);
+  } catch {
+    return fallback;
   }
-};
-
-onMounted(async () => {
+}
+function writePref(key, value) {
   try {
-    await draftStore.fetchDrafts();
-
-    const draft = await draftStore.getDraft(route.params.id);
-
-    const data = await draftStore.getMessages(route.params.id);
-
-    messages.value = data;
-
-    // Restore saved document preview
-    if (draft.document_data) {
-      documentContent.value = draft.document_data;
-    } else {
-      documentContent.value = createEmptyDocument(
-        draft.document_type || "resume",
-      );
-    }
-
-    loadingMessages.value = false;
-    if (draft.template) {
-      selectedTemplate.value = draft.template;
-    }
-    await scrollToBottom();
-  } catch (error) {
-    console.error("Failed to load draft:", error);
-    loadingMessages.value = false;
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* storage unavailable */
   }
-});
+}
+watch(sidebarOpen, (v) => writePref("fd.sidebarOpen", v));
 
+// ---------- Loading ----------
+watch(
+  () => route.params.id,
+  (id) => {
+    if (id === "new") createAndOpen();
+    else if (id) loadDraft(String(id));
+  },
+  { immediate: true },
+);
+
+async function createAndOpen() {
+  loading.value = true;
+  loadError.value = "";
+  try {
+    const created = await draftStore.createDraft();
+    router.replace(`/app/draft/${created.id}`);
+  } catch (error) {
+    loadError.value = error?.message || "Couldn't create a new draft.";
+    loading.value = false;
+  }
+}
+
+async function loadDraft(id) {
+  stopAnimation(false);
+  draftId.value = id;
+  loading.value = true;
+  loadError.value = "";
+  previewError.value = "";
+  isSending.value = false;
+  isUpdatingPreview.value = false;
+  editingTitle.value = false;
+  mobileTab.value = "chat";
+  messages.value = [];
+
+  if (!draftStore.draftsLoaded) draftStore.fetchDrafts().catch(() => {});
+
+  try {
+    const [loaded, history] = await Promise.all([
+      draftStore.getDraft(id),
+      draftStore.getMessages(id),
+    ]);
+    if (draftId.value !== id) return;
+
+    const doc = normalizeDocument(loaded.document_data, loaded.document_type);
+    latestDocument.value = doc;
+    documentContent.value = structuredClone(doc);
+    messages.value = history.map(({ role, content }) => ({ role, content }));
+
+    templateChosenByUser.value = !!loaded.template;
+    selectedTemplate.value = loaded.template || recommendTemplate(doc);
+  } catch (error) {
+    if (draftId.value !== id) return;
+    loadError.value =
+      error?.code === "PGRST116"
+        ? "This draft doesn't exist or you don't have access to it."
+        : error?.message || "Couldn't load this draft.";
+  } finally {
+    if (draftId.value === id) loading.value = false;
+  }
+
+  await scrollToBottom();
+  focusInput();
+}
+
+// ---------- Chat ----------
 async function sendMessage() {
-  if (!message.value.trim()) return;
+  const text = message.value.trim();
+  if (!text || isSending.value || !draft.value) return;
 
-  if (!draftStore.currentDraft) {
-    alert("Please create or open a draft first");
-    return;
-  }
-
-  const text = message.value;
-
-  // Automatically rename the draft from the first user message
-  if (
-    draftStore.currentDraft.title === "Untitled Draft" &&
-    messages.value.length <= 2
-  ) {
-    const title = text.slice(0, 40);
-
-    await draftStore.updateDraftTitle(draftStore.currentDraft.id, title);
-
-    draftStore.currentDraft.title = title;
-
-    await draftStore.fetchDrafts();
-  }
-
-  // Add user message to UI
-  messages.value.push({
-    role: "user",
-    content: text,
-  });
-
-  // Save user message
-  await draftStore.addMessage(draftStore.currentDraft.id, "user", text);
-
-  // Clear input
   message.value = "";
+  resizeTextarea();
+  messages.value.push({ role: "user", content: text, unsaved: true });
 
-  await scrollToBottom();
-
-  // Show thinking state
-  messages.value.push({
-    role: "assistant",
-    content: "Thinking...",
-  });
-
-  const thinkingIndex = messages.value.length - 1;
-
-  await scrollToBottom();
-
-  try {
-    // Send conversation to Gemini
-    const recentMessages = messages.value
-      .filter((msg) => msg.content !== "Thinking...")
-      .slice(-12);
-
-    const aiReply = await sendToAI(recentMessages);
-
-    // Replace thinking message
-    messages.value[thinkingIndex] = {
-      role: "assistant",
-      content: aiReply.content,
-    };
-
-    // Save AI response
-    await draftStore.addMessage(
-      draftStore.currentDraft.id,
-      "assistant",
-      aiReply.content,
-    );
-
-    // Extract structured document data
-    const document = await extractDocument(
-      messages.value,
-      documentContent.value.documentType,
-    );
-    selectedTemplate.value = recommendTemplate(document);
-
-    animateDocument(document);
-
-    // Auto recommend template
-    recommendTemplate(document);
-
-    await draftStore.saveDocument(draftStore.currentDraft.id, document);
-
-    await scrollToBottom();
-  } catch (error) {
-    console.error("AI ERROR:", error);
-
-    messages.value[thinkingIndex] = {
-      role: "assistant",
-      content: "Sorry, something went wrong while generating a response.",
-    };
-
-    await scrollToBottom();
-  }
+  await requestReply();
 }
 
-const openDraft = async (id) => {
+async function retry() {
+  const last = messages.value[messages.value.length - 1];
+  if (last?.failed) messages.value.pop();
+  await requestReply();
+}
+
+async function requestReply() {
+  const id = draftId.value;
+  isSending.value = true;
+
+  const index = messages.value.push({ role: "assistant", content: "", pending: true }) - 1;
+  const pending = messages.value[index];
+  await scrollToBottom();
+
   try {
-    const draft = await draftStore.getDraft(id);
-
-    await loadDraftMessages(id);
-
-    // Restore saved preview
-    if (draft.document_data) {
-      documentContent.value = draft.document_data;
-    } else {
-      documentContent.value = createEmptyDocument(
-        draft.document_type || "resume",
-      );
+    for (const msg of messages.value.filter((m) => m.unsaved)) {
+      await draftStore.addMessage(id, msg.role, msg.content);
+      delete msg.unsaved;
     }
 
-    router.push(`/app/draft/${id}`);
+    const reply = await sendToAI(messages.value);
+    await draftStore.addMessage(id, "assistant", reply.content);
+    if (draftId.value !== id) return;
+
+    pending.content = reply.content;
+    delete pending.pending;
   } catch (error) {
-    console.error("Failed to open draft:", error);
+    if (draftId.value !== id) return;
+    pending.content = error?.message || "Something went wrong. Please try again.";
+    pending.failed = true;
+    delete pending.pending;
+    return;
+  } finally {
+    if (draftId.value === id) {
+      isSending.value = false;
+      scrollToBottom();
+      focusInput();
+    }
   }
-};
 
-const loadDraftMessages = async (draftId) => {
-  messages.value = await draftStore.getMessages(draftId);
-};
-
-const scrollToBottom = async () => {
-  await nextTick();
-
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-  }
-};
-async function selectTemplate(template) {
-  selectedTemplate.value = template;
-
-  if (draftStore.currentDraft) {
-    await draftStore.updateTemplate(draftStore.currentDraft.id, template);
-  }
+  refreshDocument(id);
 }
 
-// Enter = send
-// Shift + Enter = new line
 function handleEnter(event) {
-  if (event.shiftKey) {
-    return;
-  }
-
+  if (event.shiftKey || event.isComposing) return;
   event.preventDefault();
   sendMessage();
 }
 
-/*
-|--------------------------------------------------------------------------
-| DOCUMENT ANIMATION
-|--------------------------------------------------------------------------
-*/
-
-function animateDocument(newDocument) {
-  const currentDocument = JSON.parse(JSON.stringify(documentContent.value));
-
-  documentContent.value = currentDocument;
-
-  // Personal information
-  animateText(currentDocument.personalInfo, newDocument.personalInfo);
-
-  // Summary
-  animateTextField(currentDocument, newDocument, "summary");
-
-  // Arrays
-  animateArray(currentDocument, newDocument, "skills");
-
-  animateArray(currentDocument, newDocument, "certifications");
-
-  animateArray(currentDocument, newDocument, "achievements");
-
-  // Object arrays
-  animateObjects(currentDocument, newDocument, "experience");
-
-  animateObjects(currentDocument, newDocument, "education");
-
-  animateObjects(currentDocument, newDocument, "projects");
-}
-
-/*
-|--------------------------------------------------------------------------
-| ANIMATE PERSONAL INFO
-|--------------------------------------------------------------------------
-*/
-
-function animateText(target, source) {
-  if (!source) return;
-
-  Object.keys(source).forEach((key) => {
-    const value = source[key];
-
-    if (!value || value === target[key]) return;
-
-    target[key] = "";
-
-    let index = 0;
-
-    const interval = setInterval(() => {
-      target[key] = value.slice(0, index + 1);
-
-      index++;
-
-      if (index >= value.length) {
-        clearInterval(interval);
-      }
-    }, 20);
+function resizeTextarea() {
+  nextTick(() => {
+    const el = textareaRef.value;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   });
 }
 
-/*
-|--------------------------------------------------------------------------
-| ANIMATE TEXT FIELD
-|--------------------------------------------------------------------------
-*/
-
-function animateTextField(target, source, field) {
-  const value = source[field];
-
-  if (!value || value === target[field]) return;
-
-  target[field] = "";
-
-  let index = 0;
-
-  const interval = setInterval(() => {
-    target[field] = value.slice(0, index + 1);
-
-    index++;
-
-    if (index >= value.length) {
-      clearInterval(interval);
-    }
-  }, 20);
+function focusInput() {
+  if (window.matchMedia("(pointer: fine)").matches) {
+    nextTick(() => textareaRef.value?.focus());
+  }
 }
-function recommendTemplate(document) {
-  if (
-    document.publications?.length > 0 ||
-    document.research?.length > 0 ||
-    document.documentType === "cv"
-  ) {
+
+async function scrollToBottom() {
+  await nextTick();
+  const el = messagesContainer.value;
+  if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+}
+
+// ---------- Document ----------
+let extractSeq = 0;
+
+async function refreshDocument(id) {
+  const seq = ++extractSeq;
+  isUpdatingPreview.value = true;
+  previewError.value = "";
+
+  try {
+    const previous = latestDocument.value;
+    const doc = await extractDocument(messages.value, previous.documentType);
+    if (seq !== extractSeq || draftId.value !== id) return;
+
+    latestDocument.value = doc;
+    animateDocument(doc);
+
+    if (!templateChosenByUser.value) selectedTemplate.value = recommendTemplate(doc);
+
+    const fields = { document_data: doc };
+    const currentTitle = draft.value?.title;
+    if (!currentTitle || currentTitle === UNTITLED || currentTitle === autoTitle(previous)) {
+      const next = autoTitle(doc);
+      if (next) fields.title = next;
+    }
+
+    await draftStore.updateDraft(id, fields);
+  } catch (error) {
+    if (seq === extractSeq && draftId.value === id) {
+      previewError.value = error?.message || "Couldn't update the preview.";
+    }
+  } finally {
+    if (seq === extractSeq && draftId.value === id) isUpdatingPreview.value = false;
+  }
+}
+
+function autoTitle(doc) {
+  if (!doc) return "";
+  const type = DOCUMENT_TYPES[doc.documentType] || "Draft";
+  if (isProseDocument(doc.documentType) && doc.title) return doc.title.slice(0, 80);
+  const name = doc.personalInfo?.name;
+  return name ? `${name} — ${type}` : "";
+}
+
+function recommendTemplate(doc) {
+  if (doc.documentType === "cv" || doc.publications?.length || doc.research?.length) {
     return "academic";
   }
-
-  if (document.experience?.length >= 3 && document.skills?.length >= 5) {
-    return "corporate";
-  }
-
+  if (doc.experience?.length >= 3) return "corporate";
   return "modern";
 }
-/*
-|--------------------------------------------------------------------------
-| ANIMATE SIMPLE ARRAYS
-|--------------------------------------------------------------------------
-*/
 
-function animateArray(target, source, field) {
-  if (!source[field]?.length) return;
-
-  target[field] = [];
-
-  source[field].forEach((item, index) => {
-    setTimeout(() => {
-      target[field].push(item);
-    }, index * 250);
-  });
+async function selectTemplate(id) {
+  selectedTemplate.value = id;
+  templateChosenByUser.value = true;
+  try {
+    await draftStore.updateTemplate(draftId.value, id);
+  } catch {
+    /* non-critical; the choice still applies this session */
+  }
 }
-function startDrag() {
+
+// ---------- Typing animation ----------
+// Changed text fields are typed in together over ~1s using a single timer.
+// A new update finishes the previous animation instantly, so nothing overlaps.
+let animationTimer = null;
+let animationJobs = [];
+
+function stopAnimation(finish = true) {
+  clearInterval(animationTimer);
+  animationTimer = null;
+  if (finish) for (const job of animationJobs) job.target[job.key] = job.value;
+  animationJobs = [];
+}
+
+function animateDocument(next) {
+  stopAnimation(true);
+  const previous = structuredClone(toRaw(documentContent.value));
+  documentContent.value = structuredClone(next);
+
+  const jobs = [];
+  const collect = (target, before) => {
+    for (const key of Object.keys(target)) {
+      const value = target[key];
+      const old = before?.[key];
+      if (typeof value === "string") {
+        if (!value || value === old) continue;
+        const start = typeof old === "string" && value.startsWith(old) ? old.length : 0;
+        jobs.push({ target, key, value, pos: start });
+        target[key] = value.slice(0, start);
+      } else if (value && typeof value === "object") {
+        collect(value, old && typeof old === "object" ? old : undefined);
+      }
+    }
+  };
+  collect(documentContent.value, previous);
+
+  if (!jobs.length) return;
+  animationJobs = jobs;
+
+  const TICK = 25;
+  const STEPS = 40;
+  animationTimer = setInterval(() => {
+    let active = false;
+    for (const job of animationJobs) {
+      if (job.pos >= job.value.length) continue;
+      job.pos = Math.min(job.value.length, job.pos + Math.max(1, Math.ceil(job.value.length / STEPS)));
+      job.target[job.key] = job.value.slice(0, job.pos);
+      active = true;
+    }
+    if (!active) stopAnimation(false);
+  }, TICK);
+}
+
+// ---------- Title ----------
+function startRename() {
+  titleDraft.value = title.value;
+  editingTitle.value = true;
+  nextTick(() => titleInput.value?.select());
+}
+
+async function saveTitle() {
+  if (!editingTitle.value) return;
+  editingTitle.value = false;
+  const next = titleDraft.value.trim().slice(0, 120);
+  if (!next || next === title.value) return;
+  try {
+    await draftStore.updateDraftTitle(draftId.value, next);
+  } catch (error) {
+    alert(error?.message || "Couldn't rename the draft.");
+  }
+}
+
+// ---------- Export ----------
+const exportName = computed(() => safeFileName(title.value === UNTITLED ? "" : title.value));
+
+function exportPDF() {
+  stopAnimation(true);
+  const original = document.title;
+  document.title = exportName.value; // becomes the default PDF file name
+  const restore = () => {
+    document.title = original;
+    window.removeEventListener("afterprint", restore);
+  };
+  window.addEventListener("afterprint", restore);
+  window.print();
+}
+
+async function downloadWord() {
+  if (exportingWord.value) return;
+  exportingWord.value = true;
+  try {
+    const { exportWord } = await import("@/services/exportWord");
+    await exportWord(latestDocument.value, exportName.value);
+  } catch (error) {
+    console.error(error);
+    alert("Couldn't create the Word document. Please try again.");
+  } finally {
+    exportingWord.value = false;
+  }
+}
+
+// ---------- Sidebar resize ----------
+function startDrag(event) {
   isDragging.value = true;
-
-  document.addEventListener("mousemove", dragSidebar);
-  document.addEventListener("mouseup", stopDrag);
+  event.preventDefault();
+  window.addEventListener("pointermove", onDrag);
+  window.addEventListener("pointerup", stopDrag);
 }
-
-function dragSidebar(e) {
-  if (!isDragging.value) return;
-
-  sidebarWidth.value = Math.max(220, Math.min(500, e.clientX));
+function onDrag(event) {
+  sidebarWidth.value = Math.max(220, Math.min(420, event.clientX));
 }
-
 function stopDrag() {
   isDragging.value = false;
-
-  document.removeEventListener("mousemove", dragSidebar);
-
-  document.removeEventListener("mouseup", stopDrag);
+  writePref("fd.sidebarWidth", sidebarWidth.value);
+  window.removeEventListener("pointermove", onDrag);
+  window.removeEventListener("pointerup", stopDrag);
 }
-/*
-|--------------------------------------------------------------------------
-| ANIMATE OBJECT ARRAYS
-|--------------------------------------------------------------------------
-*/
 
-function animateObjects(target, source, field) {
-  if (!source[field]?.length) return;
+// ---------- Page scaling (fit the A4 page to the available width) ----------
+const resizeObserver = new ResizeObserver(() => {
+  const width = pageContainer.value?.clientWidth || PAGE_WIDTH;
+  pageScale.value = Math.min(1, width / PAGE_WIDTH);
+  pageHeight.value = Math.max(PAGE_HEIGHT, pageRef.value?.offsetHeight || PAGE_HEIGHT);
+});
 
-  target[field] = [];
+watch([pageContainer, pageRef], ([container, page]) => {
+  resizeObserver.disconnect();
+  if (container) resizeObserver.observe(container);
+  if (page) resizeObserver.observe(page);
+});
 
-  source[field].forEach((item, index) => {
-    const animatedItem = {};
-
-    target[field].push(animatedItem);
-
-    Object.keys(item).forEach((key) => {
-      const value = item[key] || "";
-
-      animatedItem[key] = "";
-
-      setTimeout(() => {
-        let charIndex = 0;
-
-        const interval = setInterval(() => {
-          animatedItem[key] = value.slice(0, charIndex + 1);
-
-          charIndex++;
-
-          if (charIndex >= value.length) {
-            clearInterval(interval);
-          }
-        }, 15);
-      }, index * 200);
-    });
-  });
-}
+onBeforeUnmount(() => {
+  stopAnimation(false);
+  stopDrag();
+  resizeObserver?.disconnect();
+});
 </script>
-<template>
-  <div class="min-h-screen bg-[#0f1117] text-white">
-    <div class="flex h-[calc(100vh-48px)]">
-      <!-- LEFT SIDEBAR -->
-      <aside
-        :style="{
-          width: sidebarOpen ? `${sidebarWidth}px` : '0px',
-        }"
-        class="hidden lg:flex overflow-hidden transition-all duration-300 flex-col bg-[#171923]"
-      >
-        <div class="border-b border-[#2a3142] p-5">
-          <h1 class="text-2xl font-semibold">FirstDraft</h1>
-        </div>
 
-        <div class="p-4">
+<template>
+  <div class="flex h-dvh overflow-hidden bg-canvas text-zinc-100" :class="isDragging && 'cursor-col-resize select-none'">
+    <!-- Desktop sidebar -->
+    <aside
+      :style="{ width: sidebarOpen ? `${sidebarWidth}px` : '0px' }"
+      :class="isDragging ? '' : 'transition-[width] duration-200'"
+      class="relative hidden shrink-0 overflow-hidden border-r border-line lg:block"
+    >
+      <div :style="{ width: `${sidebarWidth}px` }" class="h-full">
+        <EditorSidebar :drafts="draftStore.drafts" :active-id="draftId" />
+      </div>
+      <div
+        v-if="sidebarOpen"
+        class="absolute inset-y-0 right-0 w-1.5 cursor-col-resize transition hover:bg-violet-500/60"
+        :class="isDragging && 'bg-violet-500/60'"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        @pointerdown="startDrag"
+      />
+    </aside>
+
+    <!-- Mobile drawer -->
+    <Transition name="fade">
+      <div
+        v-if="mobileMenuOpen"
+        class="fixed inset-0 z-40 bg-black/60 lg:hidden"
+        @click="mobileMenuOpen = false"
+      />
+    </Transition>
+    <Transition name="drawer">
+      <aside v-if="mobileMenuOpen" class="fixed inset-y-0 left-0 z-50 w-[280px] max-w-[85vw] shadow-2xl lg:hidden">
+        <EditorSidebar
+          :drafts="draftStore.drafts"
+          :active-id="draftId"
+          closable
+          @close="mobileMenuOpen = false"
+        />
+      </aside>
+    </Transition>
+
+    <div class="flex min-w-0 flex-1 flex-col">
+      <!-- Top bar -->
+      <header class="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-canvas px-3 sm:px-4">
+        <button
+          class="icon-btn hidden lg:inline-flex"
+          :aria-label="sidebarOpen ? 'Hide drafts' : 'Show drafts'"
+          @click="sidebarOpen = !sidebarOpen"
+        >
+          <component :is="sidebarOpen ? PanelLeftClose : PanelLeftOpen" :size="19" />
+        </button>
+        <button class="icon-btn lg:hidden" aria-label="Show drafts" @click="mobileMenuOpen = true">
+          <Menu :size="19" />
+        </button>
+
+        <div class="min-w-0 flex-1">
+          <input
+            v-if="editingTitle"
+            ref="titleInput"
+            v-model="titleDraft"
+            maxlength="120"
+            aria-label="Draft title"
+            class="w-full max-w-md rounded-lg border border-violet-500 bg-surface px-2.5 py-1 text-sm font-medium text-white focus:outline-none"
+            @keydown.enter.prevent="saveTitle"
+            @keydown.esc="editingTitle = false"
+            @blur="saveTitle"
+          />
           <button
-            @click="createNewDraft"
-            class="w-full rounded-xl bg-violet-600 px-4 py-3 font-medium transition hover:bg-violet-500"
+            v-else
+            class="group flex max-w-full items-center gap-2 rounded-lg px-2 py-1 text-left hover:bg-raised"
+            :disabled="loading || !!loadError"
+            title="Rename draft"
+            @click="startRename"
           >
-            New Draft
+            <span class="truncate text-sm font-medium text-white">
+              {{ loading ? "Loading…" : title }}
+            </span>
+            <Pencil v-if="!loading" :size="13" class="shrink-0 text-faint opacity-0 transition group-hover:opacity-100" />
           </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto p-4">
-          <p class="mb-4 text-xs uppercase tracking-wider text-zinc-500">
-            Recent Drafts
-          </p>
-
-          <div
-            v-for="draft in draftStore.drafts"
-            :key="draft.id"
-            @click="openDraft(draft.id)"
-            class="mb-3 cursor-pointer rounded-xl border border-[#2a3142] bg-[#1d2130] p-3 transition hover:border-violet-500"
+        <div class="flex items-center gap-2">
+          <button
+            class="btn-secondary px-3"
+            :disabled="loading || !!loadError"
+            title="Save as PDF (choose “Save as PDF” in the print dialog)"
+            @click="exportPDF"
           >
-            {{ draft.title }}
-          </div>
-
-          <div
-            v-if="draftStore.drafts.length === 0"
-            class="rounded-xl border border-[#2a3142] p-3 text-zinc-400"
+            <FileDown :size="16" />
+            <span class="hidden sm:inline">PDF</span>
+          </button>
+          <button
+            class="btn-secondary px-3"
+            :disabled="loading || !!loadError || exportingWord"
+            title="Download as Word (.docx)"
+            @click="downloadWord"
           >
-            No drafts yet
-          </div>
+            <Loader2 v-if="exportingWord" :size="16" class="animate-spin" />
+            <FileText v-else :size="16" />
+            <span class="hidden sm:inline">Word</span>
+          </button>
         </div>
-      </aside>
-      <Transition name="fade">
-        <div
-          v-if="mobileMenuOpen"
-          class="fixed inset-0 z-50 bg-black/50 lg:hidden"
-          @click="mobileMenuOpen = false"
-        >
-          <aside class="h-full w-[280px] bg-[#171923]" @click.stop>
-            <div class="border-b border-[#2a3142] p-5">
-              <div class="flex items-center justify-between">
-                <h1 class="text-xl font-semibold">FirstDraft</h1>
+      </header>
 
-                <button @click="mobileMenuOpen = false">✕</button>
-              </div>
-            </div>
-
-            <div class="p-4">
-              <button
-                @click="createNewDraft"
-                class="w-full rounded-xl bg-violet-600 px-4 py-3"
-              >
-                New Draft
-              </button>
-            </div>
-
-            <div class="overflow-y-auto p-4">
-              <div
-                v-for="draft in draftStore.drafts"
-                :key="draft.id"
-                @click="
-                  openDraft(draft.id);
-                  mobileMenuOpen = false;
-                "
-                class="mb-3 cursor-pointer rounded-xl border border-[#2a3142] bg-[#1d2130] p-3"
-              >
-                {{ draft.title }}
-              </div>
-            </div>
-            <div
-              class="absolute right-0 top-0 h-full w-1 cursor-col-resize bg-transparent hover:bg-violet-500"
-              @mousedown="startDrag"
-            />
-          </aside>
+      <!-- Load error -->
+      <div v-if="loadError" class="flex flex-1 items-center justify-center p-6">
+        <div class="card max-w-sm p-6 text-center">
+          <AlertCircle :size="28" class="mx-auto text-red-400" />
+          <p class="mt-3 text-zinc-200">{{ loadError }}</p>
+          <RouterLink to="/app/dashboard" class="btn-primary mt-5">Back to dashboard</RouterLink>
         </div>
-      </Transition>
+      </div>
 
-      <!-- CHAT COLUMN -->
-      <section
-        :class="[
-          mobileTab !== 'chat' ? 'hidden lg:flex' : 'flex',
-          'h-full min-h-0 w-full lg:w-[450px] shrink-0 flex-col overflow-hidden border-r border-[#2a3142] bg-[#11151f]',
-        ]"
-      >
-        <!-- Header -->
-        <div class="shrink-0 border-b border-[#2a3142]">
-          <div class="flex items-center justify-between p-4">
-            <button
-              @click="sidebarOpen = !sidebarOpen"
-              class="hidden lg:flex rounded-lg border border-[#2a3142] p-2"
-            >
-              ☰
-            </button>
-
-            <button
-              @click="mobileMenuOpen = true"
-              class="lg:hidden rounded-lg border border-[#2a3142] p-2"
-            >
-              ☰
-            </button>
-
-            <div class="flex items-center gap-2">
-              <button
-                @click="exportPDF"
-                class="rounded-xl border border-[#2a3142] px-4 py-2"
-              >
-                PDF
-              </button>
-
-              <button
-                @click="downloadWord"
-                class="rounded-xl border border-[#2a3142] px-4 py-2"
-              >
-                Word
-              </button>
-            </div>
-          </div>
-
-          <!-- MOBILE CHAT/PREVIEW TABS -->
-          <div class="flex lg:hidden border-t border-[#2a3142]">
-            <button
-              @click="mobileTab = 'chat'"
-              :class="
-                mobileTab === 'chat' ? 'text-violet-400' : 'text-zinc-400'
-              "
-              class="flex-1 py-3 text-sm font-medium"
-            >
-              Chat
-            </button>
-
-            <button
-              @click="mobileTab = 'preview'"
-              :class="
-                mobileTab === 'preview' ? 'text-violet-400' : 'text-zinc-400'
-              "
-              class="flex-1 py-3 text-sm font-medium"
-            >
-              Preview
-            </button>
-          </div>
-        </div>
-
-        <!-- Messages -->
-        <div ref="messagesContainer" class="min-h-0 flex-1 overflow-y-auto p-4">
-          <template v-if="loadingMessages">
-            <div
-              v-for="i in 5"
-              :key="i"
-              class="mb-4 h-20 animate-pulse rounded-3xl bg-[#1d2130]"
-            />
-          </template>
-
-          <template v-else>
-            <div v-for="(msg, index) in messages" :key="index" class="mb-4">
-              <div
-                v-if="msg.role === 'assistant'"
-                class="max-w-[90%] rounded-3xl rounded-tl-md border border-[#2a3142] bg-[#1d2130] p-4"
-              >
-                {{ msg.content }}
-              </div>
-
-              <div
-                v-else
-                class="ml-auto max-w-[90%] rounded-3xl rounded-br-md bg-violet-600 p-4"
-              >
-                {{ msg.content }}
-              </div>
-            </div>
-          </template>
-        </div>
-
-        <!-- INPUT -->
-        <form
-          class="shrink-0 border-t border-[#2a3142] p-4"
-          @submit.prevent="sendMessage"
-        >
-          <div
-            class="flex items-center gap-3 rounded-2xl border border-[#2a3142] bg-[#171923] p-3"
+      <template v-else>
+        <!-- Mobile tabs -->
+        <div class="flex shrink-0 border-b border-line lg:hidden" role="tablist">
+          <button
+            v-for="tab in ['chat', 'preview']"
+            :key="tab"
+            role="tab"
+            :aria-selected="mobileTab === tab"
+            :class="mobileTab === tab ? 'border-violet-500 text-white' : 'border-transparent text-muted'"
+            class="flex flex-1 items-center justify-center gap-2 border-b-2 py-2.5 text-sm font-medium capitalize transition"
+            @click="mobileTab = tab"
           >
-            <textarea
-              v-model="message"
-              placeholder="Reply to FirstDraft..."
-              rows="1"
-              @keydown.enter="handleEnter"
-              class="max-h-40 flex-1 resize-none bg-transparent outline-none"
-            ></textarea>
-
-            <button
-              type="submit"
-              class="rounded-xl bg-violet-600 p-2 transition hover:bg-violet-500"
-            >
-              <Send :size="18" />
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <!-- PREVIEW COLUMN -->
-      <section
-        :class="[
-          mobileTab !== 'preview' ? 'hidden lg:block' : 'block',
-          'flex-1 overflow-y-auto bg-[#0f1117] p-4 lg:p-8',
-        ]"
-      >
-        <div class="mx-auto w-full max-w-[900px]">
-          <!--selector -->
-          <div class="mb-4 flex gap-2">
-            <button
-              @click="selectedTemplate = 'modern'"
-              :class="
-                selectedTemplate === 'modern'
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-[#171923] text-zinc-400'
-              "
-              class="rounded-xl px-4 py-2 transition"
-            >
-              Modern
-            </button>
-
-            <button
-              @click="selectedTemplate = 'corporate'"
-              :class="
-                selectedTemplate === 'corporate'
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-[#171923] text-zinc-400'
-              "
-              class="rounded-xl px-4 py-2 transition"
-            >
-              Corporate
-            </button>
-
-            <button
-              @click="selectedTemplate = 'academic'"
-              :class="
-                selectedTemplate === 'academic'
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-[#171923] text-zinc-400'
-              "
-              class="rounded-xl px-4 py-2 transition"
-            >
-              Academic CV
-            </button>
-          </div>
-          <!-- Progess Card-->
-          <div class="mb-6 rounded-2xl bg-[#171923] p-5">
-            <div class="mb-2 flex items-center justify-between">
-              <h3 class="font-semibold text-white">Document Progress</h3>
-
-              <span class="text-violet-400"> {{ progress.percentage }}% </span>
-            </div>
-
-            <div class="h-2 overflow-hidden rounded-full bg-[#2a3142]">
-              <div
-                class="h-full bg-violet-500 transition-all duration-500"
-                :style="{ width: `${progress.percentage}%` }"
-              />
-            </div>
-
-            <div class="mt-4 grid grid-cols-2 gap-2 text-sm">
-              <div>
-                {{ progress.sections.personalInfo ? "✓" : "✗" }}
-                Personal Info
-              </div>
-
-              <div>
-                {{ progress.sections.summary ? "✓" : "✗" }}
-                Summary
-              </div>
-
-              <div>
-                {{ progress.sections.experience ? "✓" : "✗" }}
-                Experience
-              </div>
-
-              <div>
-                {{ progress.sections.education ? "✓" : "✗" }}
-                Education
-              </div>
-
-              <div>
-                {{ progress.sections.skills ? "✓" : "✗" }}
-                Skills
-              </div>
-
-              <div>
-                {{ progress.sections.projects ? "✓" : "✗" }}
-                Projects
-              </div>
-            </div>
-          </div>
-
-          <!-- A4 PAGE -->
-          <div
-            ref="previewRef"
-            class="mx-auto w-full max-w-[794px] bg-white p-6 text-black shadow-2xl sm:p-12"
-          >
-            <ModernTemplate
-              v-if="selectedTemplate === 'modern'"
-              :document="documentContent"
+            {{ tab }}
+            <span
+              v-if="tab === 'preview' && isUpdatingPreview"
+              class="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400"
             />
-
-            <CorporateTemplate
-              v-else-if="selectedTemplate === 'corporate'"
-              :document="documentContent"
-            />
-
-            <AcademicTemplate
-              v-else-if="selectedTemplate === 'academic'"
-              :document="documentContent"
-            />
-          </div>
+          </button>
         </div>
-      </section>
+
+        <div class="flex min-h-0 flex-1">
+          <!-- Chat -->
+          <section
+            :class="mobileTab === 'chat' ? 'flex' : 'hidden lg:flex'"
+            class="min-h-0 w-full shrink-0 flex-col border-line bg-surface/40 lg:w-[420px] lg:border-r xl:w-[460px]"
+            aria-label="Chat"
+          >
+            <div ref="messagesContainer" class="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-5">
+              <div v-if="loading" class="space-y-4">
+                <div v-for="i in 4" :key="i" :class="i % 2 ? '' : 'ml-auto'" class="h-16 w-3/4 animate-pulse rounded-2xl bg-raised" />
+              </div>
+
+              <ul v-else class="space-y-4">
+                <li
+                  v-for="(msg, index) in messages"
+                  :key="index"
+                  :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+                  class="flex animate-fade-up"
+                >
+                  <div
+                    v-if="msg.role === 'user'"
+                    class="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-violet-600 px-4 py-2.5 text-[15px] leading-relaxed text-white"
+                  >{{ msg.content }}</div>
+
+                  <div
+                    v-else-if="msg.pending"
+                    class="flex items-center gap-1.5 rounded-2xl rounded-tl-md border border-line bg-raised px-4 py-3.5"
+                    aria-label="FirstDraft is typing"
+                  >
+                    <span class="h-2 w-2 animate-bounce rounded-full bg-muted [animation-delay:-0.3s]" />
+                    <span class="h-2 w-2 animate-bounce rounded-full bg-muted [animation-delay:-0.15s]" />
+                    <span class="h-2 w-2 animate-bounce rounded-full bg-muted" />
+                  </div>
+
+                  <div
+                    v-else-if="msg.failed"
+                    class="max-w-[85%] rounded-2xl rounded-tl-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-[15px] text-red-200"
+                  >
+                    <p class="flex items-start gap-2">
+                      <AlertCircle :size="17" class="mt-0.5 shrink-0" />
+                      {{ msg.content }}
+                    </p>
+                    <button
+                      v-if="index === messages.length - 1"
+                      class="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-red-100 underline-offset-2 hover:underline"
+                      @click="retry"
+                    >
+                      <RotateCcw :size="14" /> Try again
+                    </button>
+                  </div>
+
+                  <div
+                    v-else
+                    class="message-body max-w-[90%] break-words rounded-2xl rounded-tl-md border border-line bg-raised px-4 py-3 text-[15px] leading-relaxed text-zinc-200"
+                    v-html="formatMessage(msg.content)"
+                  />
+                </li>
+              </ul>
+            </div>
+
+            <form class="shrink-0 p-3 sm:p-4" @submit.prevent="sendMessage">
+              <div
+                class="flex items-end gap-2 rounded-2xl border border-line bg-raised p-2 pl-4 transition focus-within:border-violet-500/70"
+              >
+                <textarea
+                  ref="textareaRef"
+                  v-model="message"
+                  rows="1"
+                  placeholder="Reply to FirstDraft…"
+                  aria-label="Message"
+                  :disabled="loading"
+                  class="scrollbar-thin max-h-[180px] min-h-[40px] flex-1 resize-none bg-transparent py-2 text-[15px] leading-6 text-zinc-100 placeholder:text-faint focus:outline-none"
+                  @input="resizeTextarea"
+                  @keydown.enter="handleEnter"
+                />
+                <button
+                  type="submit"
+                  :disabled="!canSend"
+                  aria-label="Send message"
+                  class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-600 text-white transition hover:bg-violet-500 disabled:bg-line disabled:text-faint"
+                >
+                  <Loader2 v-if="isSending" :size="18" class="animate-spin" />
+                  <ArrowUp v-else :size="18" />
+                </button>
+              </div>
+              <p class="mt-2 hidden text-center text-xs text-faint sm:block">
+                Enter to send · Shift + Enter for a new line
+              </p>
+            </form>
+          </section>
+
+          <!-- Preview -->
+          <section
+            :class="mobileTab === 'preview' ? 'block' : 'hidden lg:block'"
+            class="scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-auto"
+            aria-label="Document preview"
+          >
+            <div class="mx-auto max-w-[842px] px-4 py-5 sm:px-6 lg:py-8">
+              <!-- Toolbar -->
+              <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div v-if="!isProse" class="inline-flex rounded-xl border border-line bg-surface p-1" role="radiogroup" aria-label="Template">
+                  <button
+                    v-for="t in TEMPLATES"
+                    :key="t.id"
+                    role="radio"
+                    :aria-checked="selectedTemplate === t.id"
+                    :class="selectedTemplate === t.id ? 'bg-raised text-white shadow-sm' : 'text-muted hover:text-zinc-200'"
+                    class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
+                    @click="selectTemplate(t.id)"
+                  >
+                    {{ t.label }}
+                  </button>
+                </div>
+                <span v-else class="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-zinc-300">
+                  {{ DOCUMENT_TYPES[docType] }}
+                </span>
+
+                <span v-if="isUpdatingPreview" class="flex items-center gap-2 text-sm text-muted">
+                  <Loader2 :size="15" class="animate-spin" /> Updating preview…
+                </span>
+                <span v-else-if="previewError" class="flex items-center gap-2 text-sm text-amber-400" :title="previewError">
+                  <AlertCircle :size="15" /> Preview not updated
+                </span>
+              </div>
+
+              <!-- Progress -->
+              <div class="card mb-6 p-4">
+                <div class="flex items-center justify-between text-sm">
+                  <span class="font-medium text-zinc-200">
+                    {{ DOCUMENT_TYPES[docType] }} progress
+                  </span>
+                  <span class="font-semibold tabular-nums text-violet-400">{{ progress.percentage }}%</span>
+                </div>
+                <div class="mt-2.5 h-1.5 overflow-hidden rounded-full bg-line">
+                  <div
+                    class="h-full rounded-full bg-violet-500 transition-[width] duration-500"
+                    :style="{ width: `${progress.percentage}%` }"
+                  />
+                </div>
+                <ul class="mt-3 flex flex-wrap gap-1.5">
+                  <li
+                    v-for="section in progress.sections"
+                    :key="section.label"
+                    :class="section.done ? 'border-violet-500/30 bg-violet-500/10 text-violet-200' : 'border-line text-faint'"
+                    class="flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs"
+                  >
+                    <Check v-if="section.done" :size="12" />
+                    {{ section.label }}
+                  </li>
+                </ul>
+              </div>
+
+              <!-- A4 page, scaled to fit -->
+              <div ref="pageContainer" class="w-full">
+                <div :style="{ height: `${pageHeight * pageScale}px` }" class="relative mx-auto" :class="pageScale === 1 && 'w-[794px]'">
+                  <div
+                    ref="pageRef"
+                    :style="{ width: `${PAGE_WIDTH}px`, minHeight: `${PAGE_HEIGHT}px`, transform: `scale(${pageScale})` }"
+                    class="absolute left-0 top-0 origin-top-left rounded-sm bg-white px-[60px] py-[56px] text-gray-900 shadow-paper"
+                  >
+                    <div v-if="loading" class="space-y-4">
+                      <div class="h-8 w-1/2 animate-pulse rounded bg-gray-100" />
+                      <div class="h-4 w-2/3 animate-pulse rounded bg-gray-100" />
+                      <div class="h-32 animate-pulse rounded bg-gray-100" />
+                    </div>
+                    <div
+                      v-else-if="isEmpty"
+                      class="flex flex-col items-center justify-center text-center"
+                      :style="{ minHeight: `${PAGE_HEIGHT - 112}px` }"
+                    >
+                      <span class="grid h-14 w-14 place-items-center rounded-2xl bg-violet-50 text-violet-600">
+                        <FileText :size="26" />
+                      </span>
+                      <h2 class="mt-5 text-xl font-semibold text-gray-900">Your document will appear here</h2>
+                      <p class="mt-2 max-w-xs text-sm text-gray-500">
+                        Answer FirstDraft's questions in the chat and watch it build itself.
+                      </p>
+                    </div>
+                    <DocumentRenderer v-else :document="documentContent" :template="selectedTemplate" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </template>
     </div>
+
+    <!-- Print-only copy used for PDF export -->
+    <Teleport to="body">
+      <div id="print-root" class="hidden bg-white text-gray-900">
+        <DocumentRenderer :document="latestDocument" :template="selectedTemplate" />
+      </div>
+    </Teleport>
   </div>
 </template>

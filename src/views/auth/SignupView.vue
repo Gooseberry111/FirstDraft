@@ -1,9 +1,11 @@
 <script setup>
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { Mail, Lock, ArrowRight } from "lucide-vue-next";
-
+import { Mail, Lock, ArrowRight, Loader2, MailCheck } from "lucide-vue-next";
+import AuthLayout from "@/layout/AuthLayout.vue";
 import { useAuthStore } from "@/stores/auth";
+
+const MIN_PASSWORD = 8;
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -12,21 +14,31 @@ const email = ref("");
 const password = ref("");
 const errorMessage = ref("");
 const isLoading = ref(false);
+const confirmationSentTo = ref("");
 
-async function handleLogin() {
+async function handleSignup() {
+  if (isLoading.value) return;
+
+  errorMessage.value = "";
+
+  if (password.value.length < MIN_PASSWORD) {
+    errorMessage.value = `Password must be at least ${MIN_PASSWORD} characters.`;
+    return;
+  }
+
   try {
     isLoading.value = true;
-    errorMessage.value = "";
 
-    await authStore.signUp(email.value.trim(), password.value);
+    const data = await authStore.signUp(email.value.trim(), password.value);
 
-    // If email confirmation is enabled
-    router.push("/login");
-
-    // If email confirmation is disabled, use:
-    // router.push("/app");
+    if (data.session) {
+      // Email confirmation is disabled — the user is already signed in.
+      router.replace("/app/dashboard");
+    } else {
+      confirmationSentTo.value = email.value.trim();
+    }
   } catch (error) {
-    errorMessage.value = error?.message || "Failed to create account";
+    errorMessage.value = error?.message || "Failed to create account.";
   } finally {
     isLoading.value = false;
   }
@@ -34,93 +46,78 @@ async function handleLogin() {
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-zinc-950 text-white">
-    <!-- Left Side -->
-    <div
-      class="hidden lg:flex lg:w-1/2 flex-col justify-between border-r border-white/10 p-12"
-    >
-      <div>
-        <h1 class="text-3xl font-semibold tracking-tight">FirstDraft</h1>
-
-        <p class="mt-4 max-w-md text-zinc-400">
-          Build resumes, CVs, cover letters and essays through conversation.
-        </p>
-      </div>
-
-      <div>
-        <h2 class="text-5xl font-semibold leading-tight">
-          Turn ideas into polished documents.
-        </h2>
-      </div>
+  <AuthLayout
+    v-if="confirmationSentTo"
+    title="Check your email"
+    subtitle="One last step before you start writing."
+  >
+    <div class="card p-6">
+      <MailCheck :size="28" class="text-violet-400" />
+      <p class="mt-4 text-zinc-300">
+        We sent a confirmation link to
+        <span class="font-medium text-white">{{ confirmationSentTo }}</span>.
+        Open it to activate your account, then sign in.
+      </p>
     </div>
+    <RouterLink to="/login" class="btn-primary mt-6 w-full py-3">
+      Go to sign in
+      <ArrowRight :size="18" />
+    </RouterLink>
+  </AuthLayout>
 
-    <!-- Right Side -->
-    <div class="flex flex-1 items-center justify-center px-6 py-10">
-      <div
-        class="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl"
-      >
-        <div class="mb-8">
-          <h2 class="text-3xl font-semibold">Welcome To FirstDraft</h2>
-
-          <p class="mt-2 text-zinc-400">Sign up to start writing.</p>
+  <AuthLayout v-else title="Create your account" subtitle="It takes less than a minute.">
+    <form class="space-y-5" @submit.prevent="handleSignup">
+      <div>
+        <label for="email" class="label">Email</label>
+        <div class="field">
+          <Mail :size="18" aria-hidden="true" />
+          <input
+            id="email"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+          />
         </div>
-
-        <form class="space-y-5" @submit.prevent="handleLogin">
-          <div>
-            <label class="mb-2 block text-sm text-zinc-400"> Email </label>
-
-            <div
-              class="flex items-center gap-3 rounded-xl border border-white/10 px-4 py-3"
-            >
-              <Mail :size="18" />
-
-              <input
-                v-model="email"
-                type="email"
-                placeholder="you@example.com"
-                class="w-full bg-transparent outline-none"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label class="mb-2 block text-sm text-zinc-400"> Password </label>
-
-            <div
-              class="flex items-center gap-3 rounded-xl border border-white/10 px-4 py-3"
-            >
-              <Lock :size="18" />
-
-              <input
-                v-model="password"
-                type="password"
-                placeholder="••••••••"
-                class="w-full bg-transparent outline-none"
-              />
-            </div>
-          </div>
-
-          <p v-if="errorMessage" class="text-sm text-red-400">
-            {{ errorMessage }}
-          </p>
-
-          <button
-            type="submit"
-            :disabled="isLoading"
-            class="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 font-medium text-black transition hover:scale-[1.02] disabled:opacity-50"
-          >
-            {{ isLoading ? "Creating Account..." : "Sign Up" }}
-
-            <ArrowRight :size="18" />
-          </button>
-        </form>
-
-        <p class="mt-6 text-center text-sm text-zinc-400">
-          Already have an account?
-
-          <RouterLink to="/login" class="text-white"> Login </RouterLink>
-        </p>
       </div>
-    </div>
-  </div>
+
+      <div>
+        <label for="password" class="label">Password</label>
+        <div class="field">
+          <Lock :size="18" aria-hidden="true" />
+          <input
+            id="password"
+            v-model="password"
+            type="password"
+            autocomplete="new-password"
+            placeholder="At least 8 characters"
+            :minlength="MIN_PASSWORD"
+            required
+          />
+        </div>
+      </div>
+
+      <p
+        v-if="errorMessage"
+        role="alert"
+        class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+      >
+        {{ errorMessage }}
+      </p>
+
+      <button type="submit" :disabled="isLoading" class="btn-primary w-full py-3">
+        <Loader2 v-if="isLoading" :size="18" class="animate-spin" />
+        {{ isLoading ? "Creating account…" : "Create account" }}
+        <ArrowRight v-if="!isLoading" :size="18" />
+      </button>
+    </form>
+
+    <p class="mt-8 text-center text-sm text-muted">
+      Already have an account?
+      <RouterLink to="/login" class="font-medium text-violet-400 hover:text-violet-300">
+        Sign in
+      </RouterLink>
+    </p>
+  </AuthLayout>
 </template>

@@ -1,49 +1,148 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
-:root {
-  --bg: #0f1117;
-  --surface: #171923;
-  --surface-2: #1d2130;
-  --border: #2a3142;
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
 
-  --text: #f8fafc;
-  --text-muted: #94a3b8;
+  html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-  --primary: #7c3aed;
-  --primary-hover: #8b5cf6;
+  body {
+    @apply bg-canvas font-sans text-zinc-100;
+    margin: 0;
+  }
 
-  --paper: #ffffff;
-  --paper-text: #111827;
+  ::selection {
+    @apply bg-violet-500/40;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-violet-500/70 ring-offset-2 ring-offset-canvas;
+  }
 }
 
-html,
-body,
-#app {
-  width: 100%;
-  height: 100%;
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-violet-600 text-white hover:bg-violet-500 active:bg-violet-700;
+  }
+  .btn-secondary {
+    @apply btn border border-line bg-raised text-zinc-200 hover:border-line-strong hover:bg-[#202533];
+  }
+  .btn-ghost {
+    @apply btn text-muted hover:bg-raised hover:text-zinc-100;
+  }
+  .icon-btn {
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted transition hover:bg-raised hover:text-zinc-100;
+  }
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+  .field {
+    @apply flex items-center gap-3 rounded-xl border border-line bg-canvas/60 px-4 py-3 text-muted transition focus-within:border-violet-500 focus-within:text-zinc-300;
+  }
+  .field input {
+    @apply w-full bg-transparent text-zinc-100 placeholder:text-faint focus:outline-none;
+  }
+  .label {
+    @apply mb-2 block text-sm font-medium text-zinc-300;
+  }
+
+  /* Chat message formatting */
+  .message-body p + p,
+  .message-body p + ul,
+  .message-body ul + p,
+  .message-body p + ol,
+  .message-body ol + p {
+    @apply mt-2.5;
+  }
+  .message-body ul {
+    @apply list-disc space-y-1 pl-5;
+  }
+  .message-body ol {
+    @apply list-decimal space-y-1 pl-5;
+  }
+  .message-body strong {
+    @apply font-semibold text-white;
+  }
+  .message-body code {
+    @apply rounded bg-black/30 px-1 py-0.5 text-[0.85em];
+  }
+
+  /* Document templates: keep entries together across PDF page breaks */
+  .doc-entry {
+    break-inside: avoid;
+  }
+  .doc-heading {
+    break-after: avoid;
+  }
 }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #2c3240 transparent;
 }
-
-* {
-  box-sizing: border-box;
-}
-
-::-webkit-scrollbar {
+.scrollbar-thin::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #2c3240;
+  border-radius: 999px;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #2a3142;
-  border-radius: 999px;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: transform 0.25s ease;
+}
+.drawer-enter-from,
+.drawer-leave-to {
+  transform: translateX(-100%);
+}
+
+/* PDF export uses the browser's print engine so the PDF has real,
+   selectable (ATS-readable) text instead of a screenshot. */
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm 16mm 18mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+    height: auto;
+  }
+
+  #app {
+    display: none !important;
+  }
+
+  #print-root {
+    display: block !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

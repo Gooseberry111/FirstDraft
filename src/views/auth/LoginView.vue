@@ -1,111 +1,95 @@
 <script setup>
 import { ref } from "vue";
-import { useRouter } from "vue-router";
-import { Mail, Lock, ArrowRight } from "lucide-vue-next";
-
+import { useRoute, useRouter } from "vue-router";
+import { Mail, Lock, ArrowRight, Loader2 } from "lucide-vue-next";
+import AuthLayout from "@/layout/AuthLayout.vue";
 import { useAuthStore } from "@/stores/auth";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 
 const email = ref("");
 const password = ref("");
 const errorMessage = ref("");
+const isLoading = ref(false);
 
 async function handleLogin() {
+  if (isLoading.value) return;
+
   try {
+    isLoading.value = true;
     errorMessage.value = "";
 
-    await authStore.signIn(email.value, password.value);
+    await authStore.signIn(email.value.trim(), password.value);
 
-    router.push("/app/dashboard");
+    const redirect = route.query.redirect;
+    router.replace(
+      typeof redirect === "string" && redirect.startsWith("/app")
+        ? redirect
+        : "/app/dashboard",
+    );
   } catch (error) {
-    errorMessage.value = error.message;
+    errorMessage.value = error?.message || "Couldn't sign you in.";
+  } finally {
+    isLoading.value = false;
   }
 }
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-zinc-950 text-white">
-    <!-- Left Side -->
-    <div
-      class="hidden lg:flex lg:w-1/2 flex-col justify-between border-r border-white/10 p-12"
-    >
+  <AuthLayout title="Welcome back" subtitle="Sign in to continue writing.">
+    <form class="space-y-5" @submit.prevent="handleLogin">
       <div>
-        <h1 class="text-3xl font-semibold tracking-tight">FirstDraft</h1>
-
-        <p class="mt-4 max-w-md text-zinc-400">
-          Build resumes, CVs, cover letters and essays through conversation.
-        </p>
-      </div>
-
-      <div>
-        <h2 class="text-5xl font-semibold leading-tight">
-          Turn ideas into polished documents.
-        </h2>
-      </div>
-    </div>
-
-    <!-- Right Side -->
-    <div class="flex flex-1 items-center justify-center px-6 py-10">
-      <div
-        class="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl"
-      >
-        <div class="mb-8">
-          <h2 class="text-3xl font-semibold">Welcome back</h2>
-
-          <p class="mt-2 text-zinc-400">Sign in to continue writing.</p>
+        <label for="email" class="label">Email</label>
+        <div class="field">
+          <Mail :size="18" aria-hidden="true" />
+          <input
+            id="email"
+            v-model="email"
+            type="email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+          />
         </div>
-
-        <form class="space-y-5" @submit.prevent="handleLogin">
-          <div>
-            <label class="mb-2 block text-sm text-zinc-400"> Email </label>
-
-            <div
-              class="flex items-center gap-3 rounded-xl border border-white/10 px-4 py-3"
-            >
-              <Mail :size="18" />
-              <input
-                v-model="email"
-                type="email"
-                placeholder="you@example.com"
-                class="w-full bg-transparent outline-none"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label class="mb-2 block text-sm text-zinc-400"> Password </label>
-
-            <div
-              class="flex items-center gap-3 rounded-xl border border-white/10 px-4 py-3"
-            >
-              <Lock :size="18" />
-              <input
-                v-model="password"
-                type="password"
-                placeholder="••••••••"
-                class="w-full bg-transparent outline-none"
-              />
-            </div>
-          </div>
-          <p v-if="errorMessage" class="text-sm text-red-400">
-            {{ errorMessage }}
-          </p>
-          <button
-            type="submit"
-            class="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 font-medium text-black transition hover:scale-[1.02]"
-          >
-            Sign In
-            <ArrowRight :size="18" />
-          </button>
-        </form>
-
-        <p class="mt-6 text-center text-sm text-zinc-400">
-          Don't have an account?
-          <RouterLink to="/signup" class="text-white"> Create one </RouterLink>
-        </p>
       </div>
-    </div>
-  </div>
+
+      <div>
+        <label for="password" class="label">Password</label>
+        <div class="field">
+          <Lock :size="18" aria-hidden="true" />
+          <input
+            id="password"
+            v-model="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="••••••••"
+            required
+          />
+        </div>
+      </div>
+
+      <p
+        v-if="errorMessage"
+        role="alert"
+        class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+      >
+        {{ errorMessage }}
+      </p>
+
+      <button type="submit" :disabled="isLoading" class="btn-primary w-full py-3">
+        <Loader2 v-if="isLoading" :size="18" class="animate-spin" />
+        {{ isLoading ? "Signing in…" : "Sign in" }}
+        <ArrowRight v-if="!isLoading" :size="18" />
+      </button>
+    </form>
+
+    <p class="mt-8 text-center text-sm text-muted">
+      Don't have an account?
+      <RouterLink to="/signup" class="font-medium text-violet-400 hover:text-violet-300">
+        Create one
+      </RouterLink>
+    </p>
+  </AuthLayout>
 </template>

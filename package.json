@@ -1,5 +1,5 @@
 {
-  "name": "fristdraft",
+  "name": "firstdraft",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,17 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@fortawesome/fontawesome-svg-core": "^6.5.2",
-    "@fortawesome/free-regular-svg-icons": "^6.5.2",
-    "@fortawesome/free-solid-svg-icons": "^6.5.2",
-    "@fortawesome/vue-fontawesome": "^3.0.8",
     "@supabase/supabase-js": "^2.112.2",
-    "@vueuse/core": "^14.4.0",
-    "@vueuse/motion": "^3.0.3",
     "docx": "^9.7.1",
-    "file-saver": "^2.0.5",
-    "html2canvas": "^1.4.1",
-    "jspdf": "^2.5.2",
     "lucide-vue-next": "^1.0.0",
     "pinia": "^2.3.1",
     "vue": "^3.4.21",

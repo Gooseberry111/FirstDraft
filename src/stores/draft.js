@@ -1,52 +1,62 @@
 import { defineStore } from "pinia";
 import { supabase } from "@/lib/supabase";
+import { createEmptyDocument } from "@/services/documentBuilder";
+
+export const WELCOME_MESSAGE =
+  "Hi! I'm FirstDraft. What would you like to create today?\n\n- CV\n- Resume\n- Cover Letter\n- Essay";
+
+const now = () => new Date().toISOString();
 
 export const useDraftStore = defineStore("draft", {
   state: () => ({
     drafts: [],
+    draftsLoaded: false,
     currentDraft: null,
   }),
 
   actions: {
     async fetchDrafts() {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("drafts")
         .select("*")
         .order("updated_at", { ascending: false });
 
+      if (error) throw error;
+
       this.drafts = data || [];
+      this.draftsLoaded = true;
+      return this.drafts;
     },
 
     async createDraft() {
-      const sessionResult = await supabase.auth.getSession();
-
-      console.log("SESSION:", sessionResult);
-
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
-      console.log("USER:", user);
-
-      if (!user) {
-        throw new Error("No authenticated user");
-      }
+      if (!user) throw new Error("Please sign in to create a draft.");
 
       const { data, error } = await supabase
         .from("drafts")
         .insert({
           user_id: user.id,
           title: "Untitled Draft",
+          document_data: createEmptyDocument("resume"),
+          // null = "not chosen yet", so FirstDraft can recommend one
+          // (the column defaults to 'modern').
+          template: null,
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      this.currentDraft = data;
+      await this.addMessage(data.id, "assistant", WELCOME_MESSAGE);
 
+      this.currentDraft = data;
+      this.drafts.unshift(data);
       return data;
     },
+
     async getDraft(id) {
       const { data, error } = await supabase
         .from("drafts")
@@ -57,9 +67,23 @@ export const useDraftStore = defineStore("draft", {
       if (error) throw error;
 
       this.currentDraft = data;
-
       return data;
     },
+
+    async deleteDraft(id) {
+      const { error: messagesError } = await supabase
+        .from("messages")
+        .delete()
+        .eq("draft_id", id);
+      if (messagesError) throw messagesError;
+
+      const { error } = await supabase.from("drafts").delete().eq("id", id);
+      if (error) throw error;
+
+      this.drafts = this.drafts.filter((d) => d.id !== id);
+      if (this.currentDraft?.id === id) this.currentDraft = null;
+    },
+
     async getMessages(draftId) {
       const { data, error } = await supabase
         .from("messages")
@@ -68,105 +92,49 @@ export const useDraftStore = defineStore("draft", {
         .order("created_at");
 
       if (error) throw error;
-
       return data || [];
     },
+
     async addMessage(draftId, role, content) {
       const { data, error } = await supabase
         .from("messages")
-        .insert({
-          draft_id: draftId,
-          role,
-          content,
-        })
+        .insert({ draft_id: draftId, role, content })
         .select()
         .single();
 
       if (error) throw error;
-
       return data;
     },
-    async createDraft() {
-      const sessionResult = await supabase.auth.getSession();
 
-      console.log("SESSION:", sessionResult);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      console.log("USER:", user);
-
-      if (!user) {
-        throw new Error("No authenticated user");
-      }
-
-      const emptyDocument = {
-        documentType: "resume",
-        personalInfo: {
-          name: "",
-          email: "",
-          phone: "",
-          location: "",
-          linkedin: "",
-          website: "",
-        },
-        summary: "",
-        experience: [],
-        education: [],
-        skills: [],
-        projects: [],
-        certifications: [],
-        achievements: [],
-      };
-
+    async updateDraft(id, fields) {
       const { data, error } = await supabase
         .from("drafts")
-        .insert({
-          user_id: user.id,
-          title: "Untitled Draft",
-          document_data: emptyDocument,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      this.currentDraft = data;
-
-      return data;
-    },
-    async updateDraftTitle(id, title) {
-      const { error } = await supabase
-        .from("drafts")
-        .update({ title })
-        .eq("id", id);
-
-      if (error) throw error;
-    },
-    async saveDocument(id, document) {
-      const { data, error } = await supabase
-        .from("drafts")
-        .update({
-          document_data: document,
-        })
+        .update({ ...fields, updated_at: now() })
         .eq("id", id)
         .select()
         .single();
 
       if (error) throw error;
 
-      this.currentDraft = data;
+      if (this.currentDraft?.id === id) this.currentDraft = data;
+
+      const index = this.drafts.findIndex((d) => d.id === id);
+      if (index !== -1) this.drafts.splice(index, 1);
+      this.drafts.unshift(data);
 
       return data;
     },
-    async updateTemplate(id, template) {
-      const { error } = await supabase
-        .from("drafts")
-        .update({ template })
-        .eq("id", id);
 
-      if (error) throw error;
+    updateDraftTitle(id, title) {
+      return this.updateDraft(id, { title });
+    },
+
+    saveDocument(id, document) {
+      return this.updateDraft(id, { document_data: document });
+    },
+
+    updateTemplate(id, template) {
+      return this.updateDraft(id, { template });
     },
   },
 });

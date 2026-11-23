@@ -1,12 +1,21 @@
 <script setup>
-import { onMounted } from "vue";
+import { watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 
-const authStore = useAuthStore();
+const auth = useAuthStore();
+const route = useRoute();
+const router = useRouter();
 
-onMounted(() => {
-  authStore.getUser();
-});
+// If the session ends (sign-out in another tab, expired token), leave the app.
+watch(
+  () => auth.user,
+  (user) => {
+    if (!user && auth.ready && route.matched.some((r) => r.meta.requiresAuth)) {
+      router.replace({ name: "login" });
+    }
+  },
+);
 </script>
 
 <template>

@@ -150,3 +150,28 @@ export function toLines(value) {
     .map((line) => line.replace(/^\s*(?:[-*•▪◦]|\d+[.)])\s+/, "").trim())
     .filter(Boolean);
 }
+
+const isEmptyValue = (value) =>
+  value == null ||
+  (typeof value === "string" && !value.trim()) ||
+  (Array.isArray(value) && value.length === 0);
+
+// The AI sends only the fields that changed. Empty values are treated as
+// "no change" so a half-filled answer can never wipe existing content.
+export function applyDocumentPatch(base, patch) {
+  if (!patch || typeof patch !== "object") return normalizeDocument(base, base?.documentType);
+
+  const merged = { ...base, personalInfo: { ...(base?.personalInfo || {}) } };
+  for (const [key, value] of Object.entries(patch)) {
+    if (key === "personalInfo" && value && typeof value === "object") {
+      for (const [field, fieldValue] of Object.entries(value)) {
+        if (!isEmptyValue(fieldValue)) merged.personalInfo[field] = fieldValue;
+      }
+    } else if (key === "documentType") {
+      if (DOCUMENT_TYPES[value]) merged.documentType = value;
+    } else if (key in merged && !isEmptyValue(value)) {
+      merged[key] = value;
+    }
+  }
+  return normalizeDocument(merged, base?.documentType);
+}

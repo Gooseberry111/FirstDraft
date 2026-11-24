@@ -18,6 +18,12 @@
   body {
     @apply bg-canvas font-sans text-ink;
     margin: 0;
+    /* Soft colour glows behind everything */
+    background-image:
+      radial-gradient(900px 520px at -5% -10%, rgb(124 85 251 / 0.13), transparent 60%),
+      radial-gradient(760px 480px at 105% -5%, rgb(224 71 158 / 0.1), transparent 60%),
+      radial-gradient(700px 520px at 50% 115%, rgb(56 189 248 / 0.08), transparent 60%);
+    background-attachment: fixed;
   }
 
   ::selection {
@@ -30,14 +36,24 @@
 }
 
 @layer components {
+  .bg-brand-gradient {
+    background-image: linear-gradient(135deg, #6a3ef0 0%, #8f3cf2 52%, #e0479e 100%);
+  }
+  .text-gradient {
+    background-image: linear-gradient(120deg, #5a2fd6 0%, #9b3cf0 50%, #e0479e 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700;
+    @apply btn bg-brand-gradient text-white shadow-glow hover:brightness-110 active:brightness-95;
   }
   .btn-secondary {
-    @apply btn border border-line bg-surface text-ink shadow-sm hover:border-line-strong hover:bg-subtle;
+    @apply btn border border-line bg-surface text-ink shadow-sm hover:border-brand-200 hover:bg-brand-50/60;
   }
   .btn-ghost {
     @apply btn text-ink-2 hover:bg-subtle hover:text-ink;
@@ -48,17 +64,27 @@
   .card {
     @apply rounded-2xl border border-line bg-surface shadow-card;
   }
+  .glass {
+    @apply border-line/80 bg-white/75 backdrop-blur-xl;
+  }
   .field {
-    @apply flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-faint shadow-sm transition focus-within:border-brand-500 focus-within:text-brand-600 focus-within:ring-4 focus-within:ring-brand-100;
+    @apply flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-faint shadow-sm transition focus-within:border-brand-400 focus-within:text-brand-600 focus-within:ring-4 focus-within:ring-brand-100;
   }
   .field input {
     @apply w-full bg-transparent text-ink placeholder:text-faint focus:outline-none;
   }
   .label {
-    @apply mb-1.5 block text-sm font-medium text-ink-2;
+    @apply mb-1.5 block text-sm font-semibold text-ink-2;
   }
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-sm font-medium text-ink-2 shadow-sm transition hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-white px-3.5 py-1.5 text-sm font-medium text-brand-700 shadow-sm transition hover:-translate-y-px hover:border-transparent hover:bg-brand-gradient hover:text-white hover:shadow-glow disabled:opacity-50;
+  }
+
+  /* Dotted "desk" behind the document page */
+  .desk {
+    background-color: #f1eef8;
+    background-image: radial-gradient(rgb(124 85 251 / 0.16) 1px, transparent 1px);
+    background-size: 18px 18px;
   }
 
   /* Chat message formatting */
@@ -70,16 +96,16 @@
     @apply mt-2.5;
   }
   .message-body ul {
-    @apply list-disc space-y-1 pl-5;
+    @apply list-disc space-y-1 pl-5 marker:text-brand-400;
   }
   .message-body ol {
-    @apply list-decimal space-y-1 pl-5;
+    @apply list-decimal space-y-1 pl-5 marker:text-brand-400;
   }
   .message-body strong {
     @apply font-semibold text-ink;
   }
   .message-body code {
-    @apply rounded bg-subtle px-1 py-0.5 text-[0.85em];
+    @apply rounded bg-white px-1 py-0.5 text-[0.85em];
   }
 
   /* Document templates: keep entries together across PDF page breaks */
@@ -89,33 +115,46 @@
   .doc-heading {
     break-after: avoid;
   }
+  /* Full-bleed blocks (e.g. coloured header bands) reach the page edges on
+     screen; in print they stay inside the page margins. */
+  .doc-bleed-x {
+    margin-left: calc(-1 * var(--page-px, 0px));
+    margin-right: calc(-1 * var(--page-px, 0px));
+  }
+  .doc-bleed-top {
+    margin-top: calc(-1 * var(--page-py, 0px));
+  }
 
   /* Click-to-edit text in the preview */
   .editable {
     @apply -mx-1 cursor-text rounded px-1 outline-none transition-colors;
   }
   .editable:hover {
-    @apply bg-brand-50 ring-1 ring-brand-200;
+    background-color: rgb(124 85 251 / 0.08);
+    box-shadow: 0 0 0 1px rgb(124 85 251 / 0.3);
   }
   .editable:focus {
-    @apply bg-white ring-2 ring-brand-500;
+    background-color: rgb(255 255 255 / 0.9);
+    box-shadow: 0 0 0 2px #7c55fb;
+    color: #1a1530;
   }
   .editable:empty::before {
     content: attr(data-placeholder);
-    @apply italic text-gray-400;
+    font-style: italic;
+    opacity: 0.55;
   }
 }
 
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: #d6d6d2 transparent;
+  scrollbar-color: #d9d1ea transparent;
 }
 .scrollbar-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #d6d6d2;
+  background: #d9d1ea;
   border-radius: 999px;
 }
 

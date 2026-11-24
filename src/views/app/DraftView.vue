@@ -31,6 +31,7 @@ import {
   DOCUMENT_TYPES,
   createEmptyDocument,
   isDocumentEmpty,
+  applyDocumentPatch,
   isProseDocument,
   normalizeDocument,
 } from "@/services/documentBuilder";
@@ -209,7 +210,6 @@ async function createAndOpen() {
 
 async function loadDraft(id) {
   flushSave();
-  stopAnimation(false);
   draftId.value = id;
   loading.value = true;
   loadError.value = "";
@@ -303,6 +303,22 @@ async function retry() {
   await requestReply();
 }
 
+// Messages are saved in order, in the background, so replies never wait on the database.
+let saveQueue = Promise.resolve();
+function saveUnsavedMessages(id) {
+  saveQueue = saveQueue
+    .then(async () => {
+      for (const msg of messages.value.filter((m) => m.unsaved)) {
+        await draftStore.addMessage(id, msg.role, msg.content);
+        delete msg.unsaved;
+      }
+    })
+    .catch(() => {
+      /* left marked unsaved; retried with the next message */
+    });
+  return saveQueue;
+}
+
 async function requestReply() {
   const id = draftId.value;
   isSending.value = true;
@@ -310,28 +326,36 @@ async function requestReply() {
 
   const index = messages.value.push({ role: "assistant", content: "", pending: true }) - 1;
   const pending = messages.value[index];
-  await scrollToBottom();
+  scrollToBottom();
+  saveUnsavedMessages(id);
 
   let result;
   try {
-    for (const msg of messages.value.filter((m) => m.unsaved)) {
-      await draftStore.addMessage(id, msg.role, msg.content);
-      delete msg.unsaved;
-    }
-
-    result = await chatTurn(messages.value, cleanDocument());
-    await draftStore.addMessage(id, "assistant", result.reply);
+    result = await chatTurn(messages.value, cleanDocument(), (partial) => {
+      if (draftId.value !== id) return;
+      if (partial.reply) {
+        pending.content = partial.reply;
+        pending.pending = false;
+      }
+      if (partial.document) {
+        documentContent.value = applyDocumentPatch(latestDocument.value, partial.document);
+      }
+      scrollToBottom(false);
+    });
     if (draftId.value !== id) return;
 
     pending.content = result.reply;
-    delete pending.pending;
+    pending.pending = false;
+    pending.unsaved = true;
+    saveUnsavedMessages(id);
     suggestions.value = result.suggestions;
     if (result.usage) usage.value = result.usage;
   } catch (error) {
     if (draftId.value !== id) return;
     pending.content = error?.message || "Something went wrong. Please try again.";
     pending.failed = true;
-    delete pending.pending;
+    pending.pending = false;
+    documentContent.value = structuredClone(toRaw(latestDocument.value));
     return;
   } finally {
     if (draftId.value === id) {
@@ -341,14 +365,15 @@ async function requestReply() {
     }
   }
 
-  if (result.document) applyAiDocument(id, result.document);
+  if (result.document) applyAiDocument(id, applyDocumentPatch(latestDocument.value, result.document));
+  else documentContent.value = structuredClone(toRaw(latestDocument.value));
 }
 
 async function applyAiDocument(id, doc) {
   const previous = latestDocument.value;
   latestDocument.value = doc;
+  documentContent.value = structuredClone(doc);
   shownSections.value = new Set();
-  animateDocument(doc);
 
   if (!templateChosenByUser.value) selectedTemplate.value = recommendTemplate(doc);
 
@@ -399,10 +424,10 @@ function focusInput() {
   }
 }
 
-async function scrollToBottom() {
+async function scrollToBottom(smooth = true) {
   await nextTick();
   const el = messagesContainer.value;
-  if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
 }
 
 function autoTitle(doc) {
@@ -465,10 +490,9 @@ function forEachDoc(fn) {
 }
 
 const editApi = {
-  focus: () => stopAnimation(true),
+  focus: () => {},
   shown: (key) => shownSections.value.has(key),
   edit(path, value) {
-    stopAnimation(true);
     forEachDoc((doc) => {
       let target = doc;
       for (const key of path.slice(0, -1)) target = target?.[key];
@@ -480,12 +504,10 @@ const editApi = {
     scheduleSave();
   },
   remove(key, index) {
-    stopAnimation(true);
     forEachDoc((doc) => doc[key]?.splice(index, 1));
     scheduleSave();
   },
   add(key) {
-    stopAnimation(true);
     if (key !== "summary") {
       forEachDoc((doc) => {
         if (!Array.isArray(doc[key])) doc[key] = [];
@@ -509,55 +531,6 @@ function onBeforeUnload(event) {
   }
 }
 window.addEventListener("beforeunload", onBeforeUnload);
-
-// ---------- Typing animation ----------
-// Changed text fields are typed in together over ~1s using a single timer.
-let animationTimer = null;
-let animationJobs = [];
-
-function stopAnimation(finish = true) {
-  clearInterval(animationTimer);
-  animationTimer = null;
-  if (finish) for (const job of animationJobs) job.target[job.key] = job.value;
-  animationJobs = [];
-}
-
-function animateDocument(next) {
-  stopAnimation(true);
-  const previous = structuredClone(toRaw(documentContent.value));
-  documentContent.value = structuredClone(next);
-
-  const jobs = [];
-  const collect = (target, before) => {
-    for (const key of Object.keys(target)) {
-      const value = target[key];
-      const old = before?.[key];
-      if (typeof value === "string") {
-        if (!value || value === old) continue;
-        const start = typeof old === "string" && value.startsWith(old) ? old.length : 0;
-        jobs.push({ target, key, value, pos: start });
-        target[key] = value.slice(0, start);
-      } else if (value && typeof value === "object") {
-        collect(value, old && typeof old === "object" ? old : undefined);
-      }
-    }
-  };
-  collect(documentContent.value, previous);
-
-  if (!jobs.length) return;
-  animationJobs = jobs;
-
-  animationTimer = setInterval(() => {
-    let active = false;
-    for (const job of animationJobs) {
-      if (job.pos >= job.value.length) continue;
-      job.pos = Math.min(job.value.length, job.pos + Math.max(1, Math.ceil(job.value.length / 40)));
-      job.target[job.key] = job.value.slice(0, job.pos);
-      active = true;
-    }
-    if (!active) stopAnimation(false);
-  }, 25);
-}
 
 // ---------- Title ----------
 function startRename() {
@@ -586,7 +559,6 @@ const exportName = computed(() =>
 const printDocument = computed(cleanDocument);
 
 function exportPDF() {
-  stopAnimation(true);
   const original = document.title;
   document.title = exportName.value; // becomes the default PDF file name
   const restore = () => {
@@ -626,7 +598,6 @@ watch([pageContainer, pageRef], ([container, page]) => {
 
 onBeforeUnmount(() => {
   flushSave();
-  stopAnimation(false);
   resizeObserver.disconnect();
   window.removeEventListener("beforeunload", onBeforeUnload);
 });

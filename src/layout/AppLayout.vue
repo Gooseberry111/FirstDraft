@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { LayoutDashboard, User, Settings, Plus, LogOut, Menu, X } from "lucide-vue-next";
+import { LayoutDashboard, User, Settings, Plus, LogOut, Menu, X, CreditCard } from "lucide-vue-next";
 import BrandMark from "@/components/BrandMark.vue";
 import ThemeToggle from "@/components/ThemeToggle.vue";
 import { useAuthStore } from "@/stores/auth";
@@ -14,6 +14,7 @@ const mobileNavOpen = ref(false);
 const nav = [
   { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/app/profile", label: "Profile", icon: User },
+  { to: "/app/billing", label: "Plan & billing", icon: CreditCard },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ];
 

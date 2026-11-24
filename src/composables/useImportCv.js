@@ -6,6 +6,7 @@ import { ACCEPTED_FILES, extractText } from "@/services/fileImport";
 import { analyzeDocument } from "@/services/quality";
 import { DOCUMENT_TYPES, docNoun } from "@/services/documentBuilder";
 import { defaultStyle, formatDesign } from "@/components/templates/themes";
+import { isPaymentRequired, useBillingStore } from "@/stores/billing";
 
 // Upload an existing CV / letter / essay → FirstDraft rebuilds it (one AI
 // request), scores it, and opens it in the editor.
@@ -50,6 +51,10 @@ export function useImportCv() {
       });
       router.push(`/app/draft/${draft.id}`);
     } catch (error) {
+      if (isPaymentRequired(error)) {
+        useBillingStore().openPaywall("You've used your free document. Get a Pro pass to create more.");
+        return;
+      }
       importError.value = error?.message || "Couldn't import that file.";
     } finally {
       importing.value = false;

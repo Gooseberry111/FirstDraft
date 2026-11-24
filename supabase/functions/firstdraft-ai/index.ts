@@ -6,7 +6,8 @@
 //   GEMINI_API_KEY          required
 //   GEMINI_MODEL            optional (see _shared/ai-core.ts for the default)
 //   GEMINI_FALLBACK_MODEL   optional, tried when the main model is rate-limited
-//   AI_USER_DAILY_LIMIT     optional, messages per user per day (default 60, 0 = unlimited)
+//   AI_USER_DAILY_LIMIT     optional, free users' messages per day (default 60, 0 = unlimited)
+//   AI_PRO_DAILY_LIMIT      optional, Pro users' messages per day (default 200); admins are unlimited
 //   AI_GLOBAL_DAILY_LIMIT   optional, messages per day for the whole app (default 0 = unlimited)
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -24,6 +25,7 @@ import {
 } from "../_shared/ai-core.ts";
 
 const USER_DAILY_LIMIT = Number(Deno.env.get("AI_USER_DAILY_LIMIT") ?? 60);
+const PRO_DAILY_LIMIT = Number(Deno.env.get("AI_PRO_DAILY_LIMIT") ?? 200);
 const GLOBAL_DAILY_LIMIT = Number(Deno.env.get("AI_GLOBAL_DAILY_LIMIT") ?? 0);
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -70,9 +72,21 @@ Deno.serve(async (req) => {
     const isJson = action in jsonBuilders;
     const requestBody = isJson ? jsonBuilders[action](payload) : buildRequest(payload);
 
+    // Daily limit depends on the plan: admin unlimited, Pro higher, free standard.
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("is_admin, pro_until")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const dailyLimit = profile?.is_admin
+      ? 0
+      : profile?.pro_until && new Date(profile.pro_until) > new Date()
+        ? PRO_DAILY_LIMIT
+        : USER_DAILY_LIMIT;
+
     const { data: usage, error: usageError } = await admin.rpc("consume_ai_request", {
       p_user: userId,
-      p_user_limit: USER_DAILY_LIMIT,
+      p_user_limit: dailyLimit,
       p_global_limit: GLOBAL_DAILY_LIMIT,
     });
 

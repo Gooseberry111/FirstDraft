@@ -57,6 +57,25 @@ To use a different model, run `supabase secrets set GEMINI_MODEL=<model-id>`.
 
 > In Supabase → Authentication → URL Configuration, set the **Site URL** to your live site (e.g. `https://first-draftt.netlify.app`) and add `https://first-draftt.netlify.app/reset-password` to **Redirect URLs**. Otherwise confirmation and reset emails will point to the wrong address.
 
+#### Billing (Paystack)
+
+Each person's first document is free, then a 30-day Pro pass is ₦3,000. It's a single payment that doesn't renew. Billing is **off** until the admin turns it on in **Plan & billing**. While it's off, everything stays free.
+
+- The free allowance is enforced in the database (`enforce_document_allowance` trigger), so it can't be bypassed from the browser. Deleting a document doesn't give the allowance back.
+- The admin account (`profiles.is_admin`) is never charged and has no AI limit. Pro users get `AI_PRO_DAILY_LIMIT` messages a day (default 200).
+- Payments: the `payments` function creates a Paystack checkout and verifies it. The `paystack-webhook` function confirms payments using Paystack's signed callback. Both use `fulfill_payment()`, so a payment is only ever counted once.
+
+Setup:
+1. Create a Paystack account and copy the **secret key** (test keys work immediately).
+2. `supabase secrets set PAYSTACK_SECRET_KEY=sk_test_...`
+3. In Paystack → Settings → API Keys & Webhooks, set the webhook URL to `https://<project-ref>.supabase.co/functions/v1/paystack-webhook`.
+4. Optional: `PRICE_NGN` (default 3000), `PRICE_USD` (default 5), and `PAYSTACK_CURRENCIES=NGN,USD` once Paystack has enabled USD for your account.
+5. Turn charging on in the app: **Plan & billing → Admin**.
+
+#### Voice typing
+
+The mic button in the chat uses the browser's built-in speech recognition (Chrome, Edge, Safari). It's free and doesn't use the AI quota.
+
 ### 3. Database
 
 The app expects two tables, both with Row Level Security enabled so each user can only see their own data:

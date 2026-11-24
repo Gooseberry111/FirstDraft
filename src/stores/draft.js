@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { supabase } from "@/lib/supabase";
 import { createEmptyDocument } from "@/services/documentBuilder";
 import { useAuthStore } from "@/stores/auth";
+import { useBillingStore } from "@/stores/billing";
 
 // The signed-in user id, without a network round trip.
 async function currentUserId() {
@@ -57,6 +58,7 @@ export const useDraftStore = defineStore("draft", {
 
       if (error) throw error;
 
+      useBillingStore().load().catch(() => {});
       this.currentDraft = data;
       this.drafts.unshift(data);
       return data;
@@ -74,6 +76,7 @@ export const useDraftStore = defineStore("draft", {
         .single();
       if (error) throw error;
 
+      useBillingStore().load().catch(() => {});
       for (const m of messages) await this.addMessage(data.id, m.role, m.content);
       await this.addVersion(data.id, document, template, "Created").catch(() => {});
 

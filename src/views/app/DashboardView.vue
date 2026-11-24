@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from "vue";
 import { Plus, FileText, Trash2, Loader2, AlertCircle, ArrowRight, Sparkles, FileUp } from "lucide-vue-next";
 import ImportProgress from "@/components/ImportProgress.vue";
 import { useImportCv } from "@/composables/useImportCv";
+import { useBillingStore } from "@/stores/billing";
+import { Crown } from "lucide-vue-next";
 import { useDraftStore } from "@/stores/draft";
 import { DOCUMENT_TYPES, isDocumentEmpty, normalizeDocument } from "@/services/documentBuilder";
 import DocumentThumb from "@/components/templates/DocumentThumb.vue";
@@ -13,6 +15,7 @@ import { relativeTime } from "@/utils/format";
 
 const draftStore = useDraftStore();
 const { importing, stage, importError, pickFile } = useImportCv();
+const billing = useBillingStore();
 
 const loading = ref(!draftStore.draftsLoaded);
 const loadError = ref("");
@@ -105,6 +108,18 @@ async function removeDraft(draft) {
       </div>
     </section>
     <ImportProgress :importing="importing" :stage="stage" :error="importError" @dismiss="importError = ''" />
+
+    <div
+      v-if="billing.billingEnabled && !billing.isAdmin && !billing.isPro"
+      class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface px-5 py-3.5 text-sm shadow-card ring-1 ring-line"
+    >
+      <span class="text-ink-2">
+        <template v-if="billing.canCreate">Your first document is free.</template>
+        <template v-else>You've used your free document.</template>
+        A 30-day Pro pass unlocks unlimited documents, tailoring and imports.
+      </span>
+      <button class="btn-primary py-2" @click="billing.openPaywall()"><Crown :size="15" /> Get Pro</button>
+    </div>
 
     <!-- One-click starters -->
     <div class="relative z-10 -mt-6 grid grid-cols-2 gap-3 px-2 sm:px-4 lg:grid-cols-4">

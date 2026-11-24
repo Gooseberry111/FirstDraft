@@ -7,6 +7,7 @@ import { tailorDocument } from "@/services/ai";
 import { useDraftStore } from "@/stores/draft";
 import { DOCUMENT_TYPES, docNoun } from "@/services/documentBuilder";
 import { formatDesign, parseDesign } from "@/components/templates/themes";
+import { isPaymentRequired, useBillingStore } from "@/stores/billing";
 
 // Paste a job posting → a tailored copy of this resume/CV + a matching cover
 // letter, saved as two new drafts (the original is left untouched).
@@ -92,6 +93,11 @@ async function tailor() {
 
     result.value = out;
   } catch (e) {
+    if (isPaymentRequired(e)) {
+      emit("close");
+      useBillingStore().openPaywall("Tailoring creates new documents, which needs a Pro pass.");
+      return;
+    }
     error.value = e?.message || "Tailoring failed. Please try again.";
   } finally {
     working.value = false;

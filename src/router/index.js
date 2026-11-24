@@ -63,6 +63,12 @@ const routes = [
         meta: { title: "Profile" },
       },
       {
+        path: "billing",
+        name: "billing",
+        component: () => import("@/views/app/BillingView.vue"),
+        meta: { title: "Plan & billing" },
+      },
+      {
         path: "settings",
         name: "settings",
         component: () => import("@/views/app/SettingsView.vue"),

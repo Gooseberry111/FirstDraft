@@ -26,6 +26,8 @@ import {
   Share2,
   Target,
   FileUp,
+  Mic,
+  Square,
   Sparkles,
 } from "lucide-vue-next";
 
@@ -44,6 +46,7 @@ import {
 } from "@/components/templates/themes";
 import { useDraftStore, WELCOME_MESSAGE } from "@/stores/draft";
 import { isTimeoutError } from "@/lib/supabase";
+import { isPaymentRequired, useBillingStore } from "@/stores/billing";
 import { chatTurn } from "@/services/ai";
 import {
   DOCUMENT_TYPES,
@@ -64,6 +67,7 @@ import ImportProgress from "@/components/ImportProgress.vue";
 import { useImportCv } from "@/composables/useImportCv";
 import ScoreRing from "@/components/quality/ScoreRing.vue";
 import { analyzeDocument } from "@/services/quality";
+import { useSpeechInput } from "@/composables/useSpeechInput";
 
 const PAGE_WIDTH = 794; // A4 at 96dpi
 const PAGE_HEIGHT = 1123;
@@ -125,6 +129,7 @@ const BLANK_ITEMS = {
 const route = useRoute();
 const router = useRouter();
 const draftStore = useDraftStore();
+const billing = useBillingStore();
 
 // ---------- State ----------
 const draftId = ref("");
@@ -153,6 +158,12 @@ const tailorOpen = ref(false);
 const historyOpen = ref(false);
 const shareOpen = ref(false);
 const { importing, stage: importStage, importError, pickFile: importCv } = useImportCv();
+
+// Voice typing (browser speech recognition; doesn't use the AI quota).
+const voice = useSpeechInput((text) => {
+  message.value = text;
+  resizeTextarea();
+});
 const templateChosenByUser = ref(false);
 
 const mobileTab = ref("chat");
@@ -233,6 +244,12 @@ async function createAndOpen() {
       query: route.query.start ? { start: route.query.start } : {},
     });
   } catch (error) {
+    if (isPaymentRequired(error)) {
+      loading.value = false;
+      billing.openPaywall("You've used your free document. Get a Pro pass to create more.");
+      router.replace(draftId.value ? `/app/draft/${draftId.value}` : "/app/dashboard");
+      return;
+    }
     loadError.value = isTimeoutError(error)
       ? "The connection timed out. Check your internet and try again."
       : error?.message || "Couldn't create a new draft.";
@@ -347,6 +364,7 @@ async function chooseType(starter) {
 async function sendMessage(text = message.value) {
   const content = text.trim();
   if (!content || isSending.value || !draft.value) return;
+  voice.stop();
 
   if (text === message.value) {
     message.value = "";
@@ -984,7 +1002,7 @@ onBeforeUnmount(() => {
                 ref="textareaRef"
                 v-model="message"
                 rows="1"
-                :placeholder="hasStarted ? 'Type your answer…' : 'Or tell FirstDraft what you need…'"
+                :placeholder="voice.listening.value ? 'Listening… start talking' : hasStarted ? 'Type or tap the mic to talk' : 'Or tell FirstDraft what you need…'"
                 aria-label="Message"
                 :disabled="loading"
                 class="scrollbar-thin max-h-[180px] min-h-[40px] flex-1 resize-none bg-transparent py-2 text-[15px] leading-6 text-ink placeholder:text-faint focus:outline-none"
@@ -992,15 +1010,30 @@ onBeforeUnmount(() => {
                 @keydown.enter="handleEnter"
               />
               <button
+                v-if="voice.supported"
+                type="button"
+                :aria-label="voice.listening.value ? 'Stop voice typing' : 'Talk instead of typing'"
+                :title="voice.listening.value ? 'Stop' : 'Talk instead of typing'"
+                :aria-pressed="voice.listening.value"
+                :disabled="loading"
+                class="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl transition"
+                :class="voice.listening.value ? 'bg-rose-500 text-white shadow-[0_0_0_4px_rgb(244_63_94/0.2)]' : 'text-muted hover:bg-subtle hover:text-ink'"
+                @click="voice.toggle(message)"
+              >
+                <span v-if="voice.listening.value" class="absolute inset-0 animate-ping rounded-xl bg-rose-500/40" aria-hidden="true" />
+                <component :is="voice.listening.value ? Square : Mic" :size="voice.listening.value ? 14 : 18" class="relative" />
+              </button>
+              <button
                 type="submit"
                 :disabled="!canSend"
                 aria-label="Send message"
-                class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:bg-line disabled:text-faint"
+                class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-gradient text-white shadow-glow transition hover:brightness-110 disabled:bg-none disabled:bg-line disabled:text-faint disabled:shadow-none"
               >
                 <Loader2 v-if="isSending" :size="18" class="animate-spin" />
                 <ArrowUp v-else :size="18" />
               </button>
             </div>
+            <p v-if="voice.error.value" class="mt-2 text-center text-xs text-rose-600" role="alert">{{ voice.error.value }}</p>
             <p class="mt-2 text-center text-xs text-faint">
               <template v-if="usageLeft !== null && usageLeft <= 10">
                 {{ usageLeft }} message{{ usageLeft === 1 ? "" : "s" }} left today ·

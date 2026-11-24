@@ -48,9 +48,11 @@ import {
   isProseDocument,
   normalizeDocument,
 } from "@/services/documentBuilder";
-import { useDocumentProgress } from "@/composables/useDocumentProgress";
 import { formatMessage, safeFileName } from "@/utils/format";
 import { docTypeStyle } from "@/utils/docTypes";
+import QualityPanel from "@/components/quality/QualityPanel.vue";
+import ScoreRing from "@/components/quality/ScoreRing.vue";
+import { analyzeDocument } from "@/services/quality";
 
 const PAGE_WIDTH = 794; // A4 at 96dpi
 const PAGE_HEIGHT = 1123;
@@ -133,6 +135,7 @@ const saveState = ref("saved"); // saved | pending | saving | error
 
 const design = ref(""); // "style:accent" — see components/templates/themes.js
 const designOpen = ref(false);
+const qualityOpen = ref(false);
 const templateChosenByUser = ref(false);
 
 const mobileTab = ref("chat");
@@ -155,7 +158,6 @@ const draft = computed(() => draftStore.currentDraft);
 const title = computed(() => draft.value?.title || UNTITLED);
 const docType = computed(() => latestDocument.value.documentType);
 const isProse = computed(() => isProseDocument(docType.value));
-const progress = computed(() => useDocumentProgress(latestDocument.value));
 const isEmpty = computed(() => isDocumentEmpty(documentContent.value));
 const hasStarted = computed(() => messages.value.some((m) => m.role === "user"));
 const canSend = computed(() => !!message.value.trim() && !isSending.value && !loading.value);
@@ -227,6 +229,7 @@ async function loadDraft(id) {
   suggestions.value = [];
   editingTitle.value = false;
   designOpen.value = false;
+  qualityOpen.value = false;
   mobileTab.value = "chat";
   messages.value = [];
   shownSections.value = new Set();
@@ -582,6 +585,15 @@ const exportName = computed(() =>
 // Always up to date, so the browser's own Print shortcut works too.
 const printDocument = computed(cleanDocument);
 
+// ---------- Strength score ----------
+const quality = computed(() => analyzeDocument(printDocument.value));
+
+function fixWithAI(text) {
+  qualityOpen.value = false;
+  mobileTab.value = "chat";
+  sendMessage(text);
+}
+
 function exportPDF() {
   const original = document.title;
   document.title = exportName.value; // becomes the default PDF file name
@@ -898,15 +910,18 @@ onBeforeUnmount(() => {
                 {{ DOCUMENT_TYPES[docType] }}
               </span>
 
-              <div
-                class="ml-auto flex items-center gap-2.5"
-                :title="progress.sections.map((sec) => `${sec.done ? '✓' : '○'} ${sec.label}`).join('\n')"
+              <button
+                v-if="!loading && hasStarted"
+                class="ml-auto flex items-center gap-2 rounded-xl bg-white py-1 pl-1 pr-3 text-left shadow-sm ring-1 ring-line transition hover:shadow-pop hover:ring-brand-200"
+                title="See how strong your document is"
+                @click="qualityOpen = true"
               >
-                <div class="h-1.5 w-24 overflow-hidden rounded-full bg-white ring-1 ring-line">
-                  <div class="h-full rounded-full bg-brand-gradient transition-[width] duration-500" :style="{ width: `${progress.percentage}%` }" />
-                </div>
-                <span class="text-sm font-semibold tabular-nums text-ink-2">{{ progress.percentage }}%</span>
-              </div>
+                <ScoreRing :score="quality.score" :size="34" :stroke="4" />
+                <span class="leading-tight">
+                  <span class="block text-[11px] font-semibold uppercase tracking-wider text-muted">Strength</span>
+                  <span class="block text-sm font-bold text-ink">{{ quality.label }}</span>
+                </span>
+              </button>
 
               <!-- Design panel -->
               <div v-if="designOpen" class="fixed inset-0 z-20" @click="designOpen = false" />
@@ -1026,6 +1041,16 @@ onBeforeUnmount(() => {
         </section>
       </div>
     </div>
+
+    <QualityPanel
+      :open="qualityOpen"
+      :document="printDocument"
+      :draft-id="draftId"
+      :busy="isSending"
+      @close="qualityOpen = false"
+      @fix="fixWithAI"
+      @usage="(u) => (usage = u)"
+    />
 
     <!-- Print-only copy used for PDF export -->
     <Teleport to="body">

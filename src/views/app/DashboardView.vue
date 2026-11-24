@@ -4,6 +4,8 @@ import { Plus, FileText, Trash2, Loader2, AlertCircle, ArrowRight, Sparkles } fr
 import { useDraftStore } from "@/stores/draft";
 import { DOCUMENT_TYPES, isDocumentEmpty, normalizeDocument } from "@/services/documentBuilder";
 import DocumentThumb from "@/components/templates/DocumentThumb.vue";
+import ScoreRing from "@/components/quality/ScoreRing.vue";
+import { analyzeDocument } from "@/services/quality";
 import { DOC_TYPE_STYLES, docTypeStyle } from "@/utils/docTypes";
 import { relativeTime } from "@/utils/format";
 
@@ -20,7 +22,8 @@ const typeOf = (draft) => draft.document_data?.documentType || "resume";
 const drafts = computed(() =>
   draftStore.drafts.map((draft) => {
     const doc = normalizeDocument(draft.document_data, draft.document_type);
-    return { ...draft, doc, empty: isDocumentEmpty(doc) };
+    const empty = isDocumentEmpty(doc);
+    return { ...draft, doc, empty, score: empty ? null : analyzeDocument(doc).score };
   }),
 );
 
@@ -159,6 +162,13 @@ async function removeDraft(draft) {
           >
             <!-- Mini preview -->
             <div class="desk relative flex aspect-[4/3] justify-center overflow-hidden px-4 pt-4">
+              <span
+                v-if="draft.score !== null"
+                class="absolute right-2.5 top-2.5 z-10 rounded-full bg-white p-0.5 shadow-card"
+                :title="`Strength: ${draft.score}/100`"
+              >
+                <ScoreRing :score="draft.score" :size="34" :stroke="3.5" />
+              </span>
               <div v-if="!draft.empty" class="overflow-hidden rounded-t-md shadow-paper ring-1 ring-black/5 transition group-hover:scale-[1.03]">
                 <DocumentThumb :document="draft.doc" :design="draft.template" :width="150" />
               </div>

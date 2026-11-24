@@ -41,6 +41,12 @@ To use a different model, run `supabase secrets set GEMINI_MODEL=<model-id>`.
 | `AI_GLOBAL_DAILY_LIMIT` | `0` | Messages per day across the whole app (`0` = unlimited) |
 | `GEMINI_FALLBACK_MODEL` | none | A second model to try when the main one is rate-limited. Each model has its own free quota. |
 
+#### Document quality
+
+- **AI coaching:** the assistant writes to professional standards for each document type (action verbs, measurable results, ATS keywords, cover-letter structure, essay storytelling). It never invents numbers or achievements; it asks for them instead.
+- **Strength score:** an instant, rule-based check (`src/services/quality.js`, no AI request) scores every document out of 100. Each issue has a "Fix with AI" button.
+- **Expert review:** an on-demand AI review (one request) with category scores, strengths, concrete rewrites, and job-posting match with missing keywords.
+
 ### 3. Database
 
 The app expects two tables, both with Row Level Security enabled so each user can only see their own data:

@@ -14,8 +14,10 @@ import {
   GEMINI_API_KEY,
   HttpError,
   buildRequest,
+  buildReviewRequest,
   corsHeaders,
   json,
+  runReview,
   streamTurn,
 } from "../_shared/ai-core.ts";
 
@@ -56,7 +58,8 @@ Deno.serve(async (req) => {
 
   try {
     const payload = await req.json().catch(() => null);
-    const requestBody = buildRequest(payload);
+    const isReview = payload?.action === "review";
+    const requestBody = isReview ? buildReviewRequest(payload) : buildRequest(payload);
 
     const { data: usage, error: usageError } = await admin.rpc("consume_ai_request", {
       p_user: userId,
@@ -81,6 +84,11 @@ Deno.serve(async (req) => {
     if (usage?.allowed) {
       usageHeaders["X-Usage-Used"] = String(usage.used);
       usageHeaders["X-Usage-Limit"] = String(usage.limit);
+    }
+
+    if (isReview) {
+      const review = await runReview(requestBody);
+      return json({ review, usage: usage?.allowed ? { used: usage.used, limit: usage.limit } : null });
     }
 
     return await streamTurn(requestBody, usageHeaders);

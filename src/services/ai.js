@@ -99,3 +99,58 @@ export async function chatTurn(messages, document, onProgress = () => {}) {
     usage,
   };
 }
+
+/**
+ * Expert review: one AI request that grades the document like a recruiter /
+ * admissions reader. Optionally checks it against a pasted job posting.
+ */
+export async function reviewDocument(document, jobDescription = "") {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Please sign in again.");
+
+  let response;
+  try {
+    response = await fetch(FUNCTION_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: ANON_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "review", document, jobDescription }),
+    });
+  } catch {
+    throw new Error("Couldn't reach FirstDraft. Check your connection and try again.");
+  }
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.review) {
+    throw new Error(data?.error || "The review failed. Please try again.");
+  }
+
+  const r = data.review;
+  const clamp = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) || 0)));
+  return {
+    review: {
+      score: clamp(r.score, 100),
+      verdict: String(r.verdict || ""),
+      categories: (r.categories || []).map((c) => ({
+        name: String(c.name || ""),
+        score: clamp(c.score, 10),
+        comment: String(c.comment || ""),
+      })),
+      strengths: (r.strengths || []).map(String).slice(0, 3),
+      improvements: (r.improvements || []).slice(0, 5).map((i) => ({
+        title: String(i.title || ""),
+        detail: String(i.detail || ""),
+        example: String(i.example || ""),
+        fix: String(i.fix || ""),
+      })),
+      missingKeywords: (r.missingKeywords || []).map(String).slice(0, 10),
+      jobMatch: r.jobMatch == null ? null : clamp(r.jobMatch, 100),
+    },
+    usage: data.usage || null,
+  };
+}

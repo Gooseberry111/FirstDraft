@@ -34,6 +34,8 @@ export function createEmptyDocument(documentType = "resume") {
     recipient: "",
     body: [],
     closing: "",
+    // The role / programme the user is aiming for (not printed; used for tailoring)
+    targetRole: "",
   };
 }
 
@@ -109,6 +111,7 @@ export function normalizeDocument(raw, fallbackType = "resume") {
   doc.title = text(source.title);
   doc.recipient = text(source.recipient);
   doc.closing = text(source.closing);
+  doc.targetRole = text(source.targetRole);
   doc.body = (
     typeof source.body === "string"
       ? source.body.split(/\n\s*\n/)

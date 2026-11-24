@@ -22,6 +22,10 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  History,
+  Share2,
+  Target,
+  FileUp,
   Sparkles,
 } from "lucide-vue-next";
 
@@ -51,6 +55,11 @@ import {
 import { formatMessage, safeFileName } from "@/utils/format";
 import { docTypeStyle } from "@/utils/docTypes";
 import QualityPanel from "@/components/quality/QualityPanel.vue";
+import TailorDialog from "@/components/editor/TailorDialog.vue";
+import HistoryPanel from "@/components/editor/HistoryPanel.vue";
+import ShareDialog from "@/components/editor/ShareDialog.vue";
+import ImportProgress from "@/components/ImportProgress.vue";
+import { useImportCv } from "@/composables/useImportCv";
 import ScoreRing from "@/components/quality/ScoreRing.vue";
 import { analyzeDocument } from "@/services/quality";
 
@@ -136,6 +145,10 @@ const saveState = ref("saved"); // saved | pending | saving | error
 const design = ref(""); // "style:accent" — see components/templates/themes.js
 const designOpen = ref(false);
 const qualityOpen = ref(false);
+const tailorOpen = ref(false);
+const historyOpen = ref(false);
+const shareOpen = ref(false);
+const { importing, stage: importStage, importError, pickFile: importCv } = useImportCv();
 const templateChosenByUser = ref(false);
 
 const mobileTab = ref("chat");
@@ -230,6 +243,9 @@ async function loadDraft(id) {
   editingTitle.value = false;
   designOpen.value = false;
   qualityOpen.value = false;
+  tailorOpen.value = false;
+  historyOpen.value = false;
+  shareOpen.value = false;
   mobileTab.value = "chat";
   messages.value = [];
   shownSections.value = new Set();
@@ -412,6 +428,7 @@ async function applyAiDocument(id, doc) {
   try {
     await draftStore.updateDraft(id, fields);
     if (draftId.value === id) saveState.value = "saved";
+    maybeSnapshot(id, doc, "AI update");
   } catch {
     if (draftId.value === id) saveState.value = "error";
   }
@@ -500,6 +517,48 @@ async function saveNow(id, doc) {
   try {
     await draftStore.saveDocument(id, doc);
     if (draftId.value === id && !saveTimer) saveState.value = "saved";
+    maybeSnapshot(id, doc, "Your edits");
+  } catch {
+    if (draftId.value === id) saveState.value = "error";
+  }
+}
+
+// ---------- Version history ----------
+// A snapshot is kept at most every 3 minutes while the document changes.
+const SNAPSHOT_INTERVAL_MS = 3 * 60 * 1000;
+const lastSnapshotAt = new Map();
+
+function maybeSnapshot(id, doc, label) {
+  const now = Date.now();
+  if (now - (lastSnapshotAt.get(id) || 0) < SNAPSHOT_INTERVAL_MS) return;
+  lastSnapshotAt.set(id, now);
+  draftStore.addVersion(id, doc, design.value || null, label).catch(() => lastSnapshotAt.delete(id));
+}
+
+async function snapshotNow(label) {
+  await draftStore.addVersion(draftId.value, cleanDocument(), design.value || null, label);
+  lastSnapshotAt.set(draftId.value, Date.now());
+}
+
+async function restoreVersion(version) {
+  const id = draftId.value;
+  historyOpen.value = false;
+  try {
+    await snapshotNow("Before restoring");
+  } catch {
+    /* still restore */
+  }
+  const doc = normalizeDocument(version.document_data, docType.value);
+  latestDocument.value = doc;
+  documentContent.value = structuredClone(doc);
+  shownSections.value = new Set();
+  if (version.template) design.value = version.template;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  saveState.value = "saving";
+  try {
+    await draftStore.updateDraft(id, { document_data: doc, template: version.template || null });
+    if (draftId.value === id) saveState.value = "saved";
   } catch {
     if (draftId.value === id) saveState.value = "error";
   }
@@ -726,6 +785,24 @@ onBeforeUnmount(() => {
         </div>
 
         <button
+          class="icon-btn hidden sm:inline-flex"
+          :disabled="loading || !!loadError"
+          title="Version history"
+          aria-label="Version history"
+          @click="historyOpen = true"
+        >
+          <History :size="18" />
+        </button>
+        <button
+          class="icon-btn"
+          :disabled="loading || !!loadError"
+          title="Share a link"
+          aria-label="Share a link"
+          @click="shareOpen = true"
+        >
+          <Share2 :size="18" :class="draft?.share_id && 'text-brand-600'" />
+        </button>
+        <button
           class="btn-secondary px-2.5 sm:px-3"
           :disabled="loading || !!loadError"
           title="Save as PDF — choose “Save as PDF” in the print dialog"
@@ -841,6 +918,20 @@ onBeforeUnmount(() => {
               </button>
             </div>
 
+            <button
+              v-if="!loading && !hasStarted"
+              class="ml-9 mt-3 flex w-[calc(100%-2.25rem)] items-center gap-3 rounded-2xl border-2 border-dashed border-brand-200 bg-brand-50/50 p-3.5 text-left transition hover:border-brand-400 hover:bg-brand-50"
+              @click="importCv"
+            >
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-brand-600 shadow-sm">
+                <FileUp :size="18" />
+              </span>
+              <span>
+                <span class="block text-sm font-semibold text-ink">Already have a CV? Import it</span>
+                <span class="block text-xs text-muted">PDF, Word or text — we'll rebuild it and score it</span>
+              </span>
+            </button>
+
             <!-- Quick replies -->
             <div v-if="!isSending && suggestions.length" class="mt-3 flex flex-wrap gap-2 pl-9">
               <button v-for="s in suggestions" :key="s" class="chip" @click="useSuggestion(s)">
@@ -909,6 +1000,16 @@ onBeforeUnmount(() => {
               <span class="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-ink-2 ring-1 ring-line">
                 {{ DOCUMENT_TYPES[docType] }}
               </span>
+              <button
+                v-if="!isProse && !isEmpty && !loading"
+                class="btn-secondary py-2"
+                title="Create a tailored copy and a matching cover letter for a specific job"
+                @click="tailorOpen = true"
+              >
+                <Target :size="15" class="text-brand-600" />
+                <span class="hidden sm:inline">Tailor to a job</span>
+                <span class="sm:hidden">Tailor</span>
+              </button>
 
               <button
                 v-if="!loading && hasStarted"
@@ -1041,6 +1142,23 @@ onBeforeUnmount(() => {
         </section>
       </div>
     </div>
+
+    <TailorDialog
+      :open="tailorOpen"
+      :document="printDocument"
+      :design="design"
+      @close="tailorOpen = false"
+      @usage="(u) => (usage = u)"
+    />
+    <HistoryPanel
+      :open="historyOpen"
+      :draft-id="draftId"
+      @close="historyOpen = false"
+      @restore="restoreVersion"
+      @save-now="({ resolve, reject }) => snapshotNow('Saved by you').then(resolve, reject)"
+    />
+    <ShareDialog :open="shareOpen" :draft="draft" @close="shareOpen = false" />
+    <ImportProgress :importing="importing" :stage="importStage" :error="importError" @dismiss="importError = ''" />
 
     <QualityPanel
       :open="qualityOpen"

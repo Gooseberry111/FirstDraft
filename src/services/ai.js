@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { parsePartialJson } from "@/utils/partialJson";
+import { applyDocumentPatch, createEmptyDocument, normalizeDocument } from "@/services/documentBuilder";
 
 // All AI calls go through the `firstdraft-ai` Supabase Edge Function so the
 // Gemini API key never reaches the browser. One call per user message; the
@@ -100,11 +101,8 @@ export async function chatTurn(messages, document, onProgress = () => {}) {
   };
 }
 
-/**
- * Expert review: one AI request that grades the document like a recruiter /
- * admissions reader. Optionally checks it against a pasted job posting.
- */
-export async function reviewDocument(document, jobDescription = "") {
+// One-shot actions (review / import / tailor) return a single JSON result.
+async function postAction(action, payload) {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -119,18 +117,25 @@ export async function reviewDocument(document, jobDescription = "") {
         apikey: ANON_KEY,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ action: "review", document, jobDescription }),
+      body: JSON.stringify({ action, ...payload }),
     });
   } catch {
     throw new Error("Couldn't reach FirstDraft. Check your connection and try again.");
   }
 
   const data = await response.json().catch(() => null);
-  if (!response.ok || !data?.review) {
-    throw new Error(data?.error || "The review failed. Please try again.");
+  if (!response.ok || !data?.result) {
+    throw new Error(data?.error || "Something went wrong. Please try again.");
   }
+  return { result: data.result, usage: data.usage || null };
+}
 
-  const r = data.review;
+/**
+ * Expert review: one AI request that grades the document like a recruiter /
+ * admissions reader. Optionally checks it against a pasted job posting.
+ */
+export async function reviewDocument(document, jobDescription = "") {
+  const { result: r, usage } = await postAction("review", { document, jobDescription });
   const clamp = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) || 0)));
   return {
     review: {
@@ -151,6 +156,44 @@ export async function reviewDocument(document, jobDescription = "") {
       missingKeywords: (r.missingKeywords || []).map(String).slice(0, 10),
       jobMatch: r.jobMatch == null ? null : clamp(r.jobMatch, 100),
     },
-    usage: data.usage || null,
+    usage,
+  };
+}
+
+/** Turns the text of an existing CV / letter / essay into a FirstDraft document. */
+export async function importDocument(text) {
+  const { result, usage } = await postAction("import", { text });
+  if (!result.document) throw new Error("We couldn't read that document. Try another file.");
+  return { document: normalizeDocument(result.document), notes: String(result.notes || ""), usage };
+}
+
+/**
+ * Tailors a resume/CV to a job posting and writes a matching cover letter.
+ * Contact details and anything the AI leaves out are kept from the original.
+ */
+export async function tailorDocument(document, jobDescription) {
+  const { result, usage } = await postAction("tailor", { document, jobDescription });
+  const resume = applyDocumentPatch(document, { ...result.resume, personalInfo: undefined });
+  resume.personalInfo = { ...document.personalInfo };
+
+  const letter = result.coverLetter || {};
+  const coverLetter = normalizeDocument({
+    ...createEmptyDocument("cover_letter"),
+    personalInfo: { ...document.personalInfo },
+    targetRole: String(result.jobTitle || ""),
+    title: letter.title,
+    recipient: letter.recipient,
+    body: letter.body,
+    closing: letter.closing,
+  });
+
+  return {
+    company: String(result.company || ""),
+    jobTitle: String(result.jobTitle || ""),
+    resume,
+    coverLetter,
+    changes: (result.changes || []).map(String).slice(0, 6),
+    missingKeywords: (result.missingKeywords || []).map(String).slice(0, 8),
+    usage,
   };
 }

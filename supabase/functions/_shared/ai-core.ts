@@ -134,43 +134,44 @@ const DOCUMENT_KEYS = [
   "targetRole",
 ];
 
+const DOC_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    documentType: { type: "STRING", enum: DOCUMENT_TYPES },
+    personalInfo: {
+      type: "OBJECT",
+      properties: {
+        name: str,
+        email: str,
+        phone: str,
+        location: str,
+        linkedin: str,
+        website: str,
+      },
+    },
+    summary: str,
+    experience: objArray(["position", "company", "date", "description"]),
+    education: objArray(["degree", "school", "date", "details"]),
+    skills: strArray,
+    projects: objArray(["name", "description"]),
+    certifications: strArray,
+    achievements: strArray,
+    research: objArray(["title", "institution", "date", "description"]),
+    publications: objArray(["title", "publisher", "date"]),
+    title: str,
+    recipient: str,
+    body: strArray,
+    closing: str,
+    targetRole: str,
+  },
+  propertyOrdering: DOCUMENT_KEYS,
+};
+
 const RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
     reply: str,
-    document: {
-      type: "OBJECT",
-      nullable: true,
-      properties: {
-        documentType: { type: "STRING", enum: DOCUMENT_TYPES },
-        personalInfo: {
-          type: "OBJECT",
-          properties: {
-            name: str,
-            email: str,
-            phone: str,
-            location: str,
-            linkedin: str,
-            website: str,
-          },
-        },
-        summary: str,
-        experience: objArray(["position", "company", "date", "description"]),
-        education: objArray(["degree", "school", "date", "details"]),
-        skills: strArray,
-        projects: objArray(["name", "description"]),
-        certifications: strArray,
-        achievements: strArray,
-        research: objArray(["title", "institution", "date", "description"]),
-        publications: objArray(["title", "publisher", "date"]),
-        title: str,
-        recipient: str,
-        body: strArray,
-        closing: str,
-        targetRole: str,
-      },
-      propertyOrdering: DOCUMENT_KEYS,
-    },
+    document: { ...DOC_SCHEMA, nullable: true },
     suggestions: strArray,
   },
   required: ["reply", "document", "suggestions"],
@@ -243,47 +244,47 @@ export function buildRequest(payload: any) {
   };
 }
 
-// Remembered per function instance, so a rejected option is only tried once.
-const unsupported = { thinking: false, schema: false };
+// Remembered per function instance: models that reject the "thinking" option.
+// (A rejected response schema is only dropped for that one request.)
+const unsupported = { thinking: false };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // deno-lint-ignore no-explicit-any
-function applySupport(body: any) {
+function withSupport(body: any, dropSchema: boolean) {
   const generationConfig = { ...body.generationConfig };
   if (unsupported.thinking) delete generationConfig.thinkingConfig;
-  if (unsupported.schema) delete generationConfig.responseSchema;
+  if (dropSchema) delete generationConfig.responseSchema;
   return { ...body, generationConfig };
 }
 
-function startStream(model: string, body: unknown) {
-  return fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY! },
-      body: JSON.stringify(body),
-    },
-  );
+function callModel(model: string, body: unknown, stream: boolean) {
+  const method = stream ? "streamGenerateContent?alt=sse" : "generateContent";
+  return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY! },
+    body: JSON.stringify(body),
+  });
 }
 
-// Opens a Gemini stream, handling unsupported options, rate limits and the
-// optional fallback model. Returns the OK response whose body is SSE.
+// Calls Gemini, handling unsupported options, rate limits and the optional
+// fallback model. Returns the OK response (SSE body when `stream` is true).
 // deno-lint-ignore no-explicit-any
-async function openGeminiStream(requestBody: any) {
+async function openGemini(requestBody: any, stream: boolean) {
   const models = [GEMINI_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL].filter(Boolean);
   let lastStatus = 0;
 
   for (let i = 0; i < models.length; i++) {
-    let response = await startStream(models[i], applySupport(requestBody));
+    let dropSchema = false;
+    let response = await callModel(models[i], withSupport(requestBody, dropSchema), stream);
 
     // Drop options this model rejects (at most twice), then retry.
     for (let fix = 0; fix < 2 && response.status === 400; fix++) {
       const detail = await response.text();
       console.error("Gemini 400", models[i], detail);
       if (!unsupported.thinking && /thinking/i.test(detail)) unsupported.thinking = true;
-      else if (!unsupported.schema) unsupported.schema = true;
+      else if (!dropSchema) dropSchema = true;
       else break;
-      response = await startStream(models[i], applySupport(requestBody));
+      response = await callModel(models[i], withSupport(requestBody, dropSchema), stream);
     }
 
     if (response.ok && response.body) return response;
@@ -300,11 +301,28 @@ async function openGeminiStream(requestBody: any) {
   throw new HttpError(502, "The AI service returned an error. Please try again.");
 }
 
+// deno-lint-ignore no-explicit-any
+export const openGeminiStream = (requestBody: any) => openGemini(requestBody, true);
+
 // Yields the text the model writes, from Gemini's server-sent events.
 export async function* readGeminiText(upstream: Response) {
   const reader = upstream.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+
+  const textOf = (line: string) => {
+    if (!line.startsWith("data:")) return "";
+    try {
+      const event = JSON.parse(line.slice(5));
+      return (event?.candidates?.[0]?.content?.parts ?? [])
+        .filter((p: { thought?: boolean }) => !p.thought)
+        .map((p: { text?: string }) => p.text || "")
+        .join("");
+    } catch {
+      return ""; // keep-alives / partial lines
+    }
+  };
+
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
@@ -312,21 +330,16 @@ export async function* readGeminiText(upstream: Response) {
 
     let newline;
     while ((newline = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, newline).trim();
+      const text = textOf(buffer.slice(0, newline).trim());
       buffer = buffer.slice(newline + 1);
-      if (!line.startsWith("data:")) continue;
-      try {
-        const event = JSON.parse(line.slice(5));
-        const text = (event?.candidates?.[0]?.content?.parts ?? [])
-          .filter((p: { thought?: boolean }) => !p.thought)
-          .map((p: { text?: string }) => p.text || "")
-          .join("");
-        if (text) yield text;
-      } catch {
-        /* ignore keep-alives / partial lines */
-      }
+      if (text) yield text;
     }
   }
+
+  // The final event may not end with a newline — don't drop it.
+  buffer += decoder.decode();
+  const last = textOf(buffer.trim());
+  if (last) yield last;
 }
 
 // Streams the model's JSON text to the browser as plain text chunks.
@@ -456,14 +469,123 @@ export function buildReviewRequest(payload: any) {
 }
 
 // deno-lint-ignore no-explicit-any
-export async function runReview(requestBody: any) {
-  const upstream = await openGeminiStream(requestBody);
-  let text = "";
-  for await (const chunk of readGeminiText(upstream)) text += chunk;
-  try {
-    return JSON.parse(text);
-  } catch {
-    console.error("Review returned invalid JSON", text.slice(0, 500));
-    throw new HttpError(502, "The review didn't come back properly. Please try again.");
+export async function runJson(requestBody: any) {
+  // One-shot (non-streaming) call; retried once if the answer isn't valid JSON.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await openGemini(requestBody, false);
+    const data = await response.json().catch(() => null);
+    const text = (data?.candidates?.[0]?.content?.parts ?? [])
+      .filter((p: { thought?: boolean }) => !p.thought)
+      .map((p: { text?: string }) => p.text || "")
+      .join("")
+      .trim()
+      .replace(/^```(?:json)?\s*|\s*```$/g, "");
+    try {
+      return JSON.parse(text);
+    } catch {
+      console.error("Model returned invalid JSON", data?.candidates?.[0]?.finishReason, text.slice(-300));
+    }
   }
+  throw new HttpError(502, "The AI's answer didn't come back properly. Please try again.");
+}
+
+// ---------------------------------------------------------------------------
+// Import an existing document, and tailor a resume to a job (one request each)
+// ---------------------------------------------------------------------------
+
+const MAX_IMPORT_CHARS = 30_000;
+
+const IMPORT_PROMPT = `You convert the text of someone's existing CV, resume, cover letter or essay into FirstDraft's JSON document format.
+
+Rules:
+- Preserve every fact EXACTLY: names, contact details, employers, job titles, dates, numbers, schools, skills, publications. Never invent, embellish or "improve" facts.
+- Include EVERY contact detail present (email, phone, location, LinkedIn, website) in the right field. Write names in normal capitalisation (e.g. "PRIYA SHAH" → "Priya Shah").
+- Keep the person's own wording. You may only fix formatting: one bullet per line in descriptions (separated by "\\n", without bullet symbols), consistent date format like "Jan 2023 – Present", and trimming stray characters from the PDF conversion.
+- documentType: "cv" for academic/medical CVs (publications, research, teaching) or a full-history CV; "resume" for a job-focused resume; "cover_letter" or "essay" if that is what the text is.
+- Map sections to the closest fields: work/internships/volunteering → experience; degrees → education; awards/honours → achievements; licences/certificates → certifications; papers/talks → publications; research posts/projects → research or projects.
+- Leave a field empty ("" or []) if the text doesn't contain it. "summary" only if the text has a profile/summary/objective.
+- For cover letters/essays put the paragraphs in "body" (greeting as the first paragraph for letters), the subject or essay title in "title", the addressee lines joined by "\\n" in "recipient" and the sign-off in "closing".
+- "targetRole": the role/field the document targets, if obvious.
+
+Return JSON: { "document": {...}, "notes": one short sentence describing what was imported }.`;
+
+const TAILOR_PROMPT = `You are an expert recruiter tailoring a candidate's resume/CV to a specific job posting, and writing a matching cover letter.
+
+TRUTHFULNESS (most important): use ONLY facts from the candidate's document. Never add skills, tools, employers, responsibilities, numbers or achievements that aren't already there. Do not imply experience they don't have.
+
+Tailored resume ("resume" — the complete document):
+- Rewrite the summary for this exact role: target title, relevant experience, the most relevant real achievement.
+- Reorder bullets within each role, and the skills list, so the most relevant to the posting come first.
+- Rephrase existing bullets using the posting's terminology where it accurately describes the same work (helps ATS keyword matching).
+- Never tack new claims onto a bullet (e.g. adding "through effective stakeholder management" to a bullet that didn't say it).
+- You may shorten or drop items that are irrelevant to this job, but keep all employers, dates and education.
+- Keep the same documentType, personalInfo, and set "targetRole" to the job title.
+
+Cover letter ("coverLetter"):
+- About 300 words (250–400); "body" is an array of paragraphs with the greeting first (named hiring manager if the posting names one, otherwise "Dear [Company] Hiring Team,").
+- Hook (role + strongest relevant qualification, never "I am writing to apply") → 2–3 proof points from the resume mapped to the posting's key requirements → specific "why this company" drawn from the posting → confident call to action.
+- "title" = "Application for <Job Title>", "recipient" = addressee lines joined by "\\n" (e.g. "Hiring Team\\n<Company>"), "closing" = sign-off like "Kind regards,".
+
+Also return:
+- "company": the company name from the posting ("" if unknown) and "jobTitle".
+- "changes": 3–6 short bullet points describing what you changed in the resume and why.
+- "missingKeywords": up to 8 important requirements from the posting that the resume doesn't show — the candidate should add them ONLY if true.`;
+
+const LETTER_SCHEMA = {
+  type: "OBJECT",
+  properties: { title: str, recipient: str, body: strArray, closing: str },
+  propertyOrdering: ["title", "recipient", "body", "closing"],
+};
+
+const IMPORT_SCHEMA = {
+  type: "OBJECT",
+  properties: { document: DOC_SCHEMA, notes: str },
+  required: ["document", "notes"],
+  propertyOrdering: ["document", "notes"],
+};
+
+const TAILOR_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    company: str,
+    jobTitle: str,
+    resume: DOC_SCHEMA,
+    coverLetter: LETTER_SCHEMA,
+    changes: strArray,
+    missingKeywords: strArray,
+  },
+  required: ["company", "jobTitle", "resume", "coverLetter", "changes", "missingKeywords"],
+  propertyOrdering: ["company", "jobTitle", "resume", "coverLetter", "changes", "missingKeywords"],
+};
+
+const jsonRequest = (system: string, text: string, schema: unknown, maxOutputTokens = 8192) => ({
+  systemInstruction: { parts: [{ text: system }] },
+  contents: [{ role: "user", parts: [{ text }] }],
+  generationConfig: {
+    responseMimeType: "application/json",
+    responseSchema: schema,
+    maxOutputTokens,
+    temperature: 0.3,
+    thinkingConfig: { thinkingLevel: "minimal" },
+  },
+});
+
+// deno-lint-ignore no-explicit-any
+export function buildImportRequest(payload: any) {
+  const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+  if (text.length < 40) throw new HttpError(400, "We couldn't find enough text in that file.");
+  return jsonRequest(IMPORT_PROMPT, `DOCUMENT TEXT:\n${text.slice(0, MAX_IMPORT_CHARS)}`, IMPORT_SCHEMA);
+}
+
+// deno-lint-ignore no-explicit-any
+export function buildTailorRequest(payload: any) {
+  const documentJson = JSON.stringify(payload?.document || {});
+  if (documentJson.length > MAX_DOCUMENT_CHARS) throw new HttpError(400, "This document is too long to tailor.");
+  const posting = typeof payload?.jobDescription === "string" ? payload.jobDescription.trim() : "";
+  if (posting.length < 40) throw new HttpError(400, "Paste the full job posting so FirstDraft can tailor to it.");
+  return jsonRequest(
+    TAILOR_PROMPT,
+    `CANDIDATE DOCUMENT (JSON):\n${documentJson}\n\nJOB POSTING:\n${posting.slice(0, MAX_JOB_POSTING_CHARS)}`,
+    TAILOR_SCHEMA,
+  );
 }

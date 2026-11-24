@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import { Plus, FileText, Trash2, Loader2, AlertCircle, ArrowRight, Sparkles } from "lucide-vue-next";
+import { Plus, FileText, Trash2, Loader2, AlertCircle, ArrowRight, Sparkles, FileUp } from "lucide-vue-next";
+import ImportProgress from "@/components/ImportProgress.vue";
+import { useImportCv } from "@/composables/useImportCv";
 import { useDraftStore } from "@/stores/draft";
 import { DOCUMENT_TYPES, isDocumentEmpty, normalizeDocument } from "@/services/documentBuilder";
 import DocumentThumb from "@/components/templates/DocumentThumb.vue";
@@ -10,6 +12,7 @@ import { DOC_TYPE_STYLES, docTypeStyle } from "@/utils/docTypes";
 import { relativeTime } from "@/utils/format";
 
 const draftStore = useDraftStore();
+const { importing, stage, importError, pickFile } = useImportCv();
 
 const loading = ref(!draftStore.draftsLoaded);
 const loadError = ref("");
@@ -92,8 +95,16 @@ async function removeDraft(draft) {
         <p class="mt-2 max-w-md text-white/80">
           Pick a document and answer a few questions — FirstDraft writes it with you, live.
         </p>
+        <button
+          class="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-lg transition hover:-translate-y-0.5 hover:bg-brand-50"
+          @click="pickFile"
+        >
+          <FileUp :size="17" /> Import an existing CV
+        </button>
+        <p class="mt-2 text-xs text-white/70">PDF, Word or text — rebuilt and scored in seconds</p>
       </div>
     </section>
+    <ImportProgress :importing="importing" :stage="stage" :error="importError" @dismiss="importError = ''" />
 
     <!-- One-click starters -->
     <div class="relative z-10 -mt-6 grid grid-cols-2 gap-3 px-2 sm:px-4 lg:grid-cols-4">

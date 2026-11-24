@@ -57,6 +57,57 @@ export const useDraftStore = defineStore("draft", {
       return data;
     },
 
+    // Creates a draft that already has content (import / tailor).
+    async createDraftFrom({ title, document, template = null, messages = [] }) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Please sign in to create a draft.");
+
+      const { data, error } = await supabase
+        .from("drafts")
+        .insert({ user_id: user.id, title: title || "Untitled Draft", document_data: document, template })
+        .select()
+        .single();
+      if (error) throw error;
+
+      for (const m of messages) await this.addMessage(data.id, m.role, m.content);
+      await this.addVersion(data.id, document, template, "Created").catch(() => {});
+
+      this.drafts.unshift(data);
+      return data;
+    },
+
+    // ---------- Version history ----------
+    async listVersions(draftId) {
+      const { data, error } = await supabase
+        .from("draft_versions")
+        .select("id, document_data, template, label, created_at")
+        .eq("draft_id", draftId)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return data || [];
+    },
+
+    async addVersion(draftId, document, template, label = "") {
+      const { error } = await supabase
+        .from("draft_versions")
+        .insert({ draft_id: draftId, document_data: document, template, label });
+      if (error) throw error;
+    },
+
+    // ---------- Sharing ----------
+    async setSharing(id, enabled) {
+      return this.updateDraft(id, { share_id: enabled ? crypto.randomUUID() : null });
+    },
+
+    async getSharedDraft(shareId) {
+      const { data, error } = await supabase.rpc("get_shared_draft", { p_share_id: shareId });
+      if (error) throw error;
+      return data?.[0] || null;
+    },
+
     async getDraft(id) {
       const { data, error } = await supabase
         .from("drafts")

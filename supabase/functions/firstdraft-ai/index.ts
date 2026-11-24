@@ -13,11 +13,13 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
   GEMINI_API_KEY,
   HttpError,
+  buildImportRequest,
   buildRequest,
   buildReviewRequest,
+  buildTailorRequest,
   corsHeaders,
   json,
-  runReview,
+  runJson,
   streamTurn,
 } from "../_shared/ai-core.ts";
 
@@ -58,8 +60,15 @@ Deno.serve(async (req) => {
 
   try {
     const payload = await req.json().catch(() => null);
-    const isReview = payload?.action === "review";
-    const requestBody = isReview ? buildReviewRequest(payload) : buildRequest(payload);
+    // "turn" streams a chat reply; the others return one JSON result.
+    const jsonBuilders: Record<string, (p: unknown) => unknown> = {
+      review: buildReviewRequest,
+      import: buildImportRequest,
+      tailor: buildTailorRequest,
+    };
+    const action = String(payload?.action || "");
+    const isJson = action in jsonBuilders;
+    const requestBody = isJson ? jsonBuilders[action](payload) : buildRequest(payload);
 
     const { data: usage, error: usageError } = await admin.rpc("consume_ai_request", {
       p_user: userId,
@@ -86,9 +95,9 @@ Deno.serve(async (req) => {
       usageHeaders["X-Usage-Limit"] = String(usage.limit);
     }
 
-    if (isReview) {
-      const review = await runReview(requestBody);
-      return json({ review, usage: usage?.allowed ? { used: usage.used, limit: usage.limit } : null });
+    if (isJson) {
+      const result = await runJson(requestBody);
+      return json({ result, usage: usage?.allowed ? { used: usage.used, limit: usage.limit } : null });
     }
 
     return await streamTurn(requestBody, usageHeaders);

@@ -6,7 +6,30 @@ import LoginView from "@/views/auth/LoginView.vue";
 import SignupView from "@/views/auth/SignupView.vue";
 
 const routes = [
-  { path: "/", redirect: "/app/dashboard" },
+  {
+    path: "/",
+    name: "landing",
+    component: () => import("@/views/LandingView.vue"),
+    meta: { guestOnly: true, title: "Write a CV that gets you noticed" },
+  },
+  {
+    path: "/s/:shareId",
+    name: "shared",
+    component: () => import("@/views/SharedView.vue"),
+    meta: { public: true, title: "Shared document" },
+  },
+  {
+    path: "/forgot-password",
+    name: "forgot-password",
+    component: () => import("@/views/auth/ForgotPasswordView.vue"),
+    meta: { guestOnly: true, title: "Reset password" },
+  },
+  {
+    path: "/reset-password",
+    name: "reset-password",
+    component: () => import("@/views/auth/ResetPasswordView.vue"),
+    meta: { public: true, title: "Choose a new password" },
+  },
   { path: "/app", redirect: "/app/dashboard" },
 
   {
@@ -56,7 +79,7 @@ const routes = [
     meta: { requiresAuth: true, title: "Editor" },
   },
 
-  { path: "/:pathMatch(.*)*", redirect: "/app/dashboard" },
+  { path: "/:pathMatch(.*)*", redirect: "/" },
 ];
 
 const router = createRouter({

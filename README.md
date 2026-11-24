@@ -47,6 +47,16 @@ To use a different model, run `supabase secrets set GEMINI_MODEL=<model-id>`.
 - **Strength score:** an instant, rule-based check (`src/services/quality.js`, no AI request) scores every document out of 100. Each issue has a "Fix with AI" button.
 - **Expert review:** an on-demand AI review (one request) with category scores, strengths, concrete rewrites, and job-posting match with missing keywords.
 
+#### More features
+
+- **Import:** upload a PDF, Word or text CV. The text is extracted in the browser and the AI rebuilds it faithfully (one request).
+- **Tailor to a job:** creates a tailored copy plus a matching cover letter as new drafts (one request). It never adds skills that aren't in the original.
+- **Version history:** snapshots are saved automatically, at most every 3 minutes, to `draft_versions`. The newest 30 per draft are kept.
+- **Share link:** `/s/<share_id>` is a read-only public page. It is only available while `drafts.share_id` is set.
+- **Password reset:** `/forgot-password` sends an email that links to `/reset-password`.
+
+> In Supabase → Authentication → URL Configuration, set the **Site URL** to your live site (e.g. `https://first-draftt.netlify.app`) and add `https://first-draftt.netlify.app/reset-password` to **Redirect URLs**. Otherwise confirmation and reset emails will point to the wrong address.
+
 ### 3. Database
 
 The app expects two tables, both with Row Level Security enabled so each user can only see their own data:

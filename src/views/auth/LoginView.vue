@@ -56,7 +56,10 @@ async function handleLogin() {
       </div>
 
       <div>
-        <label for="password" class="label">Password</label>
+        <div class="mb-1.5 flex items-center justify-between">
+          <label for="password" class="label mb-0">Password</label>
+          <RouterLink to="/forgot-password" class="text-sm font-medium text-brand-600 hover:text-brand-700">Forgot password?</RouterLink>
+        </div>
         <div class="field">
           <Lock :size="18" aria-hidden="true" />
           <input

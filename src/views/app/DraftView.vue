@@ -223,15 +223,6 @@ watch(sidebarOpen, (value) => {
 });
 
 // ---------- Loading ----------
-watch(
-  () => route.params.id,
-  (id) => {
-    if (id === "new") createAndOpen();
-    else if (id) loadDraft(String(id));
-  },
-  { immediate: true },
-);
-
 async function createAndOpen() {
   flushSave();
   loading.value = true;
@@ -741,6 +732,17 @@ onBeforeUnmount(() => {
   resizeObserver.disconnect();
   window.removeEventListener("beforeunload", onBeforeUnload);
 });
+// Start loading LAST: the loaders use state declared throughout this file
+// (save timers, snapshots…). Running them earlier crashed the editor with
+// "Cannot access … before initialization" and left it stuck on "Loading".
+watch(
+  () => route.params.id,
+  (id) => {
+    if (id === "new") createAndOpen();
+    else if (id) loadDraft(String(id));
+  },
+  { immediate: true },
+);
 </script>
 
 <template>

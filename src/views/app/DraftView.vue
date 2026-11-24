@@ -5,6 +5,9 @@ import {
   AlertCircle,
   ArrowUp,
   Check,
+  ChevronDown,
+  Palette,
+  X,
   CloudOff,
   FileDown,
   FileText,
@@ -25,6 +28,16 @@ import {
 import EditorSidebar from "@/components/editor/EditorSidebar.vue";
 import DocumentRenderer from "@/components/templates/DocumentRenderer.vue";
 import { provideEditApi } from "@/components/templates/editing";
+import DocumentThumb from "@/components/templates/DocumentThumb.vue";
+import {
+  ACCENTS,
+  accentHex,
+  defaultStyle,
+  formatDesign,
+  parseDesign,
+  sampleFor,
+  stylesFor,
+} from "@/components/templates/themes";
 import { useDraftStore } from "@/stores/draft";
 import { chatTurn } from "@/services/ai";
 import {
@@ -37,16 +50,12 @@ import {
 } from "@/services/documentBuilder";
 import { useDocumentProgress } from "@/composables/useDocumentProgress";
 import { formatMessage, safeFileName } from "@/utils/format";
+import { docTypeStyle } from "@/utils/docTypes";
 
 const PAGE_WIDTH = 794; // A4 at 96dpi
 const PAGE_HEIGHT = 1123;
 const UNTITLED = "Untitled Draft";
 
-const TEMPLATES = [
-  { id: "modern", label: "Modern" },
-  { id: "corporate", label: "Corporate" },
-  { id: "academic", label: "Academic" },
-];
 
 // Choosing a document type is answered locally — no AI request needed.
 const STARTERS = [
@@ -122,7 +131,8 @@ const documentContent = ref(createEmptyDocument());
 const shownSections = ref(new Set());
 const saveState = ref("saved"); // saved | pending | saving | error
 
-const selectedTemplate = ref("modern");
+const design = ref(""); // "style:accent" — see components/templates/themes.js
+const designOpen = ref(false);
 const templateChosenByUser = ref(false);
 
 const mobileTab = ref("chat");
@@ -216,6 +226,7 @@ async function loadDraft(id) {
   isSending.value = false;
   suggestions.value = [];
   editingTitle.value = false;
+  designOpen.value = false;
   mobileTab.value = "chat";
   messages.value = [];
   shownSections.value = new Set();
@@ -236,7 +247,7 @@ async function loadDraft(id) {
     messages.value = history.map(({ role, content }) => ({ role, content }));
 
     templateChosenByUser.value = !!loaded.template;
-    selectedTemplate.value = loaded.template || recommendTemplate(doc);
+    design.value = formatDesign(parseDesign(loaded.template || recommendStyle(doc), doc.documentType));
   } catch (error) {
     if (draftId.value !== id) return;
     loadError.value =
@@ -265,7 +276,9 @@ async function chooseType(starter) {
 
   latestDocument.value.documentType = starter.type;
   documentContent.value.documentType = starter.type;
-  if (!templateChosenByUser.value) selectedTemplate.value = starter.type === "cv" ? "academic" : "modern";
+  if (!templateChosenByUser.value) {
+    design.value = formatDesign({ style: defaultStyle(starter.type), accent: currentDesign.value.accent });
+  }
 
   messages.value.push({ role: "user", content: label });
   messages.value.push({ role: "assistant", content: starter.question });
@@ -375,7 +388,9 @@ async function applyAiDocument(id, doc) {
   documentContent.value = structuredClone(doc);
   shownSections.value = new Set();
 
-  if (!templateChosenByUser.value) selectedTemplate.value = recommendTemplate(doc);
+  if (!templateChosenByUser.value) {
+    design.value = formatDesign({ style: recommendStyle(doc), accent: currentDesign.value.accent });
+  }
 
   const fields = { document_data: doc };
   const currentTitle = draft.value?.title;
@@ -438,19 +453,28 @@ function autoTitle(doc) {
   return name ? `${name} — ${type}` : "";
 }
 
-function recommendTemplate(doc) {
-  if (doc.documentType === "cv" || doc.publications?.length || doc.research?.length) {
-    return "academic";
-  }
-  if (doc.experience?.length >= 3) return "corporate";
+function recommendStyle(doc) {
+  if (isProseDocument(doc.documentType)) return defaultStyle(doc.documentType);
+  if (doc.documentType === "cv" || doc.publications?.length || doc.research?.length) return "academic";
+  if (doc.experience?.length >= 3) return "executive";
   return "modern";
 }
 
-async function selectTemplate(id) {
-  selectedTemplate.value = id;
+// ---------- Design (style + accent colour) ----------
+const currentDesign = computed(() => parseDesign(design.value, docType.value));
+const designStyles = computed(() => stylesFor(docType.value));
+const currentStyleLabel = computed(
+  () => designStyles.value.find((st) => st.id === currentDesign.value.style)?.label || "",
+);
+const thumbDocument = computed(() =>
+  isDocumentEmpty(latestDocument.value) ? sampleFor(docType.value) : printDocument.value,
+);
+
+async function updateDesign(changes) {
+  design.value = formatDesign({ ...currentDesign.value, ...changes });
   templateChosenByUser.value = true;
   try {
-    await draftStore.updateTemplate(draftId.value, id);
+    await draftStore.updateTemplate(draftId.value, design.value);
   } catch {
     /* non-critical; the choice still applies this session */
   }
@@ -574,7 +598,7 @@ async function downloadWord() {
   exportingWord.value = true;
   try {
     const { exportWord } = await import("@/services/exportWord");
-    await exportWord(cleanDocument(), exportName.value);
+    await exportWord(cleanDocument(), exportName.value, { accent: accentHex(currentDesign.value.accent) });
   } catch (error) {
     console.error(error);
     alert("Couldn't create the Word document. Please try again.");
@@ -740,7 +764,7 @@ onBeforeUnmount(() => {
               >
                 <span
                   v-if="msg.role !== 'user'"
-                  class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-600"
+                  class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-gradient text-white shadow-glow"
                   aria-hidden="true"
                 >
                   <Sparkles :size="14" />
@@ -748,7 +772,7 @@ onBeforeUnmount(() => {
 
                 <div
                   v-if="msg.role === 'user'"
-                  class="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-brand-600 px-4 py-2.5 text-[15px] leading-relaxed text-white"
+                  class="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-brand-gradient px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-glow"
                 >{{ msg.content }}</div>
 
                 <div
@@ -791,10 +815,13 @@ onBeforeUnmount(() => {
               <button
                 v-for="starter in STARTERS"
                 :key="starter.type"
-                class="group flex flex-col items-start rounded-xl border border-line bg-surface p-3.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-pop"
+                class="group flex flex-col items-start rounded-2xl border border-line bg-surface p-3.5 text-left shadow-card transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-pop"
                 @click="chooseType(starter)"
               >
-                <span class="grid h-9 w-9 place-items-center rounded-lg bg-brand-50 text-brand-600 transition group-hover:bg-brand-600 group-hover:text-white">
+                <span
+                  class="grid h-10 w-10 place-items-center rounded-xl text-white transition group-hover:scale-105"
+                  :class="docTypeStyle(starter.type).tile"
+                >
                   <component :is="starter.icon" :size="18" />
                 </span>
                 <span class="mt-3 text-sm font-semibold text-ink">{{ DOCUMENT_TYPES[starter.type] }}</span>
@@ -845,34 +872,96 @@ onBeforeUnmount(() => {
         <!-- Preview -->
         <section
           :class="mobileTab === 'preview' ? 'block' : 'hidden lg:block'"
-          class="scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-auto"
+          class="desk scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-auto"
           aria-label="Document preview"
         >
           <div class="mx-auto max-w-[842px] px-4 py-5 sm:px-6 lg:py-7">
             <!-- Toolbar -->
-            <div class="mb-4 flex flex-wrap items-center gap-3">
-              <div v-if="!isProse" class="inline-flex rounded-xl border border-line bg-surface p-1 shadow-sm" role="radiogroup" aria-label="Template">
-                <button
-                  v-for="t in TEMPLATES"
-                  :key="t.id"
-                  role="radio"
-                  :aria-checked="selectedTemplate === t.id"
-                  :class="selectedTemplate === t.id ? 'bg-brand-600 text-white shadow-sm' : 'text-ink-2 hover:bg-subtle'"
-                  class="rounded-lg px-3 py-1.5 text-sm font-medium transition"
-                  @click="selectTemplate(t.id)"
+            <div class="relative mb-4 flex flex-wrap items-center gap-2.5">
+              <button
+                class="btn-secondary py-2 pl-2 pr-3"
+                :aria-expanded="designOpen"
+                :disabled="loading"
+                @click="designOpen = !designOpen"
+              >
+                <span
+                  class="grid h-7 w-7 place-items-center rounded-lg text-white shadow-sm"
+                  :style="{ background: accentHex(currentDesign.accent) }"
                 >
-                  {{ t.label }}
-                </button>
-              </div>
-              <span v-else class="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-2 shadow-sm">
+                  <Palette :size="15" />
+                </span>
+                Design
+                <span class="hidden font-medium text-muted sm:inline">· {{ currentStyleLabel }}</span>
+                <ChevronDown :size="15" class="text-muted transition" :class="designOpen && 'rotate-180'" />
+              </button>
+              <span class="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-ink-2 ring-1 ring-line">
                 {{ DOCUMENT_TYPES[docType] }}
               </span>
 
-              <div class="ml-auto flex items-center gap-2.5" :title="progress.sections.map((s) => `${s.done ? '✓' : '○'} ${s.label}`).join('\n')">
-                <div class="h-1.5 w-24 overflow-hidden rounded-full bg-line">
-                  <div class="h-full rounded-full bg-brand-500 transition-[width] duration-500" :style="{ width: `${progress.percentage}%` }" />
+              <div
+                class="ml-auto flex items-center gap-2.5"
+                :title="progress.sections.map((sec) => `${sec.done ? '✓' : '○'} ${sec.label}`).join('\n')"
+              >
+                <div class="h-1.5 w-24 overflow-hidden rounded-full bg-white ring-1 ring-line">
+                  <div class="h-full rounded-full bg-brand-gradient transition-[width] duration-500" :style="{ width: `${progress.percentage}%` }" />
                 </div>
-                <span class="text-sm font-medium tabular-nums text-ink-2">{{ progress.percentage }}%</span>
+                <span class="text-sm font-semibold tabular-nums text-ink-2">{{ progress.percentage }}%</span>
+              </div>
+
+              <!-- Design panel -->
+              <div v-if="designOpen" class="fixed inset-0 z-20" @click="designOpen = false" />
+              <div
+                v-if="designOpen"
+                class="card absolute left-0 right-0 top-full z-30 mt-2 animate-pop-in p-4 shadow-pop sm:p-5"
+                role="dialog"
+                aria-label="Design"
+                @keydown.esc="designOpen = false"
+              >
+                <div class="flex items-center justify-between">
+                  <h3 class="font-semibold text-ink">Style</h3>
+                  <button class="icon-btn -mr-2 -mt-1" aria-label="Close design panel" @click="designOpen = false">
+                    <X :size="17" />
+                  </button>
+                </div>
+                <div class="mt-3 grid grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-x-3 gap-y-4">
+                  <button
+                    v-for="st in designStyles"
+                    :key="st.id"
+                    class="group flex flex-col items-center"
+                    :aria-pressed="currentDesign.style === st.id"
+                    @click="updateDesign({ style: st.id })"
+                  >
+                    <span
+                      class="overflow-hidden rounded-lg transition group-hover:-translate-y-0.5 group-hover:shadow-pop"
+                      :class="currentDesign.style === st.id ? 'shadow-glow ring-2 ring-brand-500 ring-offset-2' : 'ring-1 ring-line'"
+                    >
+                      <DocumentThumb :document="thumbDocument" :design="`${st.id}:${currentDesign.accent}`" :width="128" />
+                    </span>
+                    <span
+                      class="mt-2 flex items-center gap-1 text-sm font-semibold"
+                      :class="currentDesign.style === st.id ? 'text-brand-700' : 'text-ink-2'"
+                    >
+                      <Check v-if="currentDesign.style === st.id" :size="14" />{{ st.label }}
+                    </span>
+                  </button>
+                </div>
+
+                <h3 class="mt-5 font-semibold text-ink">Accent colour</h3>
+                <div class="mt-3 flex flex-wrap gap-2.5">
+                  <button
+                    v-for="a in ACCENTS"
+                    :key="a.id"
+                    :title="a.label"
+                    :aria-label="`${a.label} accent`"
+                    :aria-pressed="currentDesign.accent === a.id"
+                    class="grid h-9 w-9 place-items-center rounded-full text-white shadow-sm ring-offset-2 transition hover:scale-110"
+                    :class="currentDesign.accent === a.id && 'ring-2 ring-ink/70'"
+                    :style="{ background: `linear-gradient(135deg, ${a.hex}, ${a.hex}cc)` }"
+                    @click="updateDesign({ accent: a.id })"
+                  >
+                    <Check v-if="currentDesign.accent === a.id" :size="16" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -885,8 +974,18 @@ onBeforeUnmount(() => {
               <div :style="{ height: `${pageHeight * pageScale}px` }" class="relative mx-auto" :class="pageScale === 1 && 'w-[794px]'">
                 <div
                   ref="pageRef"
-                  :style="{ width: `${PAGE_WIDTH}px`, minHeight: `${PAGE_HEIGHT}px`, transform: `scale(${pageScale})` }"
-                  class="absolute left-0 top-0 origin-top-left rounded-md bg-white px-[60px] py-[56px] text-gray-900 shadow-paper ring-1 ring-black/5"
+                  :style="{
+                    width: `${PAGE_WIDTH}px`,
+                    minHeight: `${PAGE_HEIGHT}px`,
+                    transform: `scale(${pageScale})`,
+                    '--page-px': '60px',
+                    '--page-py': '56px',
+                    '--page-h': `${PAGE_HEIGHT}px`,
+                    '--band-px': '60px',
+                    '--band-py': '48px',
+                    '--band-radius': '0px',
+                  }"
+                  class="absolute left-0 top-0 origin-top-left overflow-hidden rounded-md bg-white px-[60px] py-[56px] text-gray-900 shadow-paper ring-1 ring-black/5"
                 >
                   <div v-if="loading" class="space-y-4">
                     <div class="h-8 w-1/2 animate-pulse rounded bg-gray-100" />
@@ -906,7 +1005,7 @@ onBeforeUnmount(() => {
                       {{ hasStarted ? "Answer FirstDraft's questions and watch it fill in." : "Pick what you'd like to create in the chat to get started." }}
                     </p>
                   </div>
-                  <DocumentRenderer v-else :document="documentContent" :template="selectedTemplate" editable />
+                  <DocumentRenderer v-else :document="documentContent" :design="design" editable />
                 </div>
               </div>
             </div>
@@ -931,7 +1030,7 @@ onBeforeUnmount(() => {
     <!-- Print-only copy used for PDF export -->
     <Teleport to="body">
       <div id="print-root" class="hidden bg-white text-gray-900">
-        <DocumentRenderer :document="printDocument" :template="selectedTemplate" />
+        <DocumentRenderer :document="printDocument" :design="design" />
       </div>
     </Teleport>
   </div>

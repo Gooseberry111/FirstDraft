@@ -31,12 +31,12 @@ const points = [
     </main>
 
     <!-- Showcase panel -->
-    <aside class="relative hidden w-[46%] max-w-[620px] flex-col justify-center overflow-hidden bg-brand-600 p-12 text-white lg:flex">
+    <aside class="relative hidden w-[46%] max-w-[620px] flex-col justify-center overflow-hidden bg-brand-gradient p-12 text-white lg:flex">
       <div class="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-white/10" aria-hidden="true" />
-      <div class="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-white/5" aria-hidden="true" />
+      <div class="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-sky-300/25 blur-3xl" aria-hidden="true" />
 
       <div class="relative">
-        <h2 class="max-w-md text-4xl font-semibold leading-tight tracking-tight">
+        <h2 class="max-w-md text-4xl font-extrabold leading-tight tracking-tight">
           Your resume, cover letter or essay — written with you in minutes.
         </h2>
 
@@ -60,7 +60,7 @@ const points = [
 
         <ul class="mt-10 space-y-5">
           <li v-for="point in points" :key="point.title" class="flex items-start gap-3">
-            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/15">
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/15 ring-1 ring-white/20 backdrop-blur">
               <component :is="point.icon" :size="18" />
             </span>
             <span>

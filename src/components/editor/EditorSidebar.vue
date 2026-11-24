@@ -1,5 +1,6 @@
 <script setup>
-import { Plus, ArrowLeft, X, FileText, GraduationCap, Mail, PenLine } from "lucide-vue-next";
+import { Plus, ArrowLeft, X } from "lucide-vue-next";
+import { docTypeStyle } from "@/utils/docTypes";
 import BrandMark from "@/components/BrandMark.vue";
 import { relativeTime } from "@/utils/format";
 
@@ -11,11 +12,10 @@ defineProps({
 
 defineEmits(["close"]);
 
-const icons = { resume: FileText, cv: GraduationCap, cover_letter: Mail, essay: PenLine };
 </script>
 
 <template>
-  <div class="flex h-full w-full flex-col bg-surface">
+  <div class="flex h-full w-full flex-col bg-white/90 backdrop-blur-xl">
     <div class="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
       <RouterLink to="/app/dashboard" aria-label="Back to dashboard">
         <BrandMark />
@@ -46,16 +46,16 @@ const icons = { resume: FileText, cv: GraduationCap, cover_letter: Mail, essay: 
         :key="draft.id"
         :to="`/app/draft/${draft.id}`"
         :aria-current="draft.id === activeId ? 'page' : undefined"
-        :class="draft.id === activeId ? 'bg-brand-50 text-ink' : 'text-ink-2 hover:bg-subtle'"
+        :class="draft.id === activeId ? 'bg-brand-50 text-ink ring-1 ring-brand-200' : 'text-ink-2 hover:bg-subtle'"
         class="flex items-start gap-2.5 rounded-lg px-3 py-2.5 transition"
         @click="$emit('close')"
       >
-        <component
-          :is="icons[draft.document_data?.documentType] || FileText"
-          :size="16"
-          :class="draft.id === activeId ? 'text-brand-600' : 'text-faint'"
-          class="mt-0.5 shrink-0"
-        />
+        <span
+          class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg"
+          :class="docTypeStyle(draft.document_data?.documentType).soft"
+        >
+          <component :is="docTypeStyle(draft.document_data?.documentType).icon" :size="14" />
+        </span>
         <span class="min-w-0">
           <span class="block truncate text-sm font-medium">{{ draft.title || "Untitled Draft" }}</span>
           <span class="block text-xs text-muted">{{ relativeTime(draft.updated_at || draft.created_at) }}</span>

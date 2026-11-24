@@ -44,7 +44,7 @@ async function signOut() {
     <!-- Sidebar -->
     <aside
       :class="mobileNavOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'"
-      class="fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-line bg-surface transition-transform duration-200 md:sticky md:top-0 md:h-screen"
+      class="fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-line/80 bg-white/80 backdrop-blur-xl transition-transform duration-200 md:sticky md:top-0 md:h-screen"
     >
       <div class="flex h-16 items-center justify-between px-5">
         <RouterLink to="/app/dashboard" aria-label="FirstDraft home"><BrandMark /></RouterLink>
@@ -66,7 +66,7 @@ async function signOut() {
           :key="item.to"
           :to="item.to"
           class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-ink-2 transition hover:bg-subtle hover:text-ink"
-          active-class="!bg-brand-50 !text-brand-700"
+          active-class="!bg-brand-gradient !text-white shadow-glow"
         >
           <component :is="item.icon" :size="18" />
           {{ item.label }}
@@ -75,7 +75,7 @@ async function signOut() {
 
       <div class="border-t border-line p-3">
         <div class="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
-          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-100 text-sm font-semibold uppercase text-brand-700">
+          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-gradient text-sm font-bold uppercase text-white">
             {{ auth.user?.email?.[0] || "?" }}
           </span>
           <span class="min-w-0 flex-1 truncate text-sm text-ink-2">{{ auth.user?.email }}</span>

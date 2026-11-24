@@ -2,7 +2,8 @@ import { isProseDocument, toLines } from "@/services/documentBuilder";
 import { safeFileName } from "@/utils/format";
 
 // `docx` is large, so it is loaded only when the user actually exports.
-export async function exportWord(document, fileName) {
+export async function exportWord(document, fileName, { accent = "#5a2fd6" } = {}) {
+  const ACCENT = accent.replace("#", "").toUpperCase();
   const {
     AlignmentType,
     BorderStyle,
@@ -28,10 +29,10 @@ export async function exportWord(document, fileName) {
       keepNext: true,
       spacing: { before: 280, after: 100 },
       border: {
-        bottom: { style: BorderStyle.SINGLE, color: "9CA3AF", size: 6, space: 2 },
+        bottom: { style: BorderStyle.SINGLE, color: ACCENT, size: 6, space: 2 },
       },
       children: [
-        new TextRun({ text: title.toUpperCase(), bold: true, size: 21, color: "4C1D95" }),
+        new TextRun({ text: title.toUpperCase(), bold: true, size: 21, color: ACCENT }),
       ],
     });
 

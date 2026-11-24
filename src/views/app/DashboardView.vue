@@ -1,18 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import {
-  Plus,
-  FileText,
-  GraduationCap,
-  Mail,
-  PenLine,
-  Trash2,
-  Loader2,
-  AlertCircle,
-  ArrowRight,
-} from "lucide-vue-next";
+import { Plus, FileText, Trash2, Loader2, AlertCircle, ArrowRight, Sparkles } from "lucide-vue-next";
 import { useDraftStore } from "@/stores/draft";
-import { DOCUMENT_TYPES } from "@/services/documentBuilder";
+import { DOCUMENT_TYPES, isDocumentEmpty, normalizeDocument } from "@/services/documentBuilder";
+import DocumentThumb from "@/components/templates/DocumentThumb.vue";
+import { DOC_TYPE_STYLES, docTypeStyle } from "@/utils/docTypes";
 import { relativeTime } from "@/utils/format";
 
 const draftStore = useDraftStore();
@@ -21,15 +13,16 @@ const loading = ref(!draftStore.draftsLoaded);
 const loadError = ref("");
 const deletingId = ref(null);
 
-const STARTERS = [
-  { type: "resume", icon: FileText, text: "1–2 pages, tailored to a job" },
-  { type: "cv", icon: GraduationCap, text: "Full academic & career history" },
-  { type: "cover_letter", icon: Mail, text: "To go with an application" },
-  { type: "essay", icon: PenLine, text: "Personal statement, scholarship…" },
-];
-const typeIcons = Object.fromEntries(STARTERS.map((s) => [s.type, s.icon]));
+const STARTERS = Object.entries(DOC_TYPE_STYLES).map(([type, style]) => ({ type, ...style }));
 
 const typeOf = (draft) => draft.document_data?.documentType || "resume";
+
+const drafts = computed(() =>
+  draftStore.drafts.map((draft) => {
+    const doc = normalizeDocument(draft.document_data, draft.document_type);
+    return { ...draft, doc, empty: isDocumentEmpty(doc) };
+  }),
+);
 
 const greeting = computed(() => {
   const hour = new Date().getHours();
@@ -63,24 +56,54 @@ async function removeDraft(draft) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 md:px-10 md:py-12">
-    <header>
-      <p class="text-sm font-medium text-brand-600">{{ greeting }}</p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink">What are we writing today?</h1>
-    </header>
+  <div class="mx-auto max-w-6xl px-4 py-6 sm:px-6 md:px-10 md:py-10">
+    <!-- Hero -->
+    <section class="relative overflow-hidden rounded-3xl bg-brand-gradient px-6 py-8 text-white shadow-pop sm:px-10 sm:py-10">
+      <div class="pointer-events-none absolute -right-16 -top-20 h-72 w-72 rounded-full bg-white/15 blur-2xl" aria-hidden="true" />
+      <div class="pointer-events-none absolute -bottom-24 right-40 h-56 w-56 rounded-full bg-sky-300/30 blur-3xl" aria-hidden="true" />
+
+      <!-- Floating page decoration -->
+      <div class="pointer-events-none absolute -bottom-10 right-8 hidden rotate-6 lg:block" aria-hidden="true">
+        <div class="w-44 rounded-xl bg-white p-4 shadow-2xl">
+          <div class="h-2.5 w-24 rounded bg-gray-900" />
+          <div class="mt-1.5 h-1.5 w-32 rounded bg-gray-300" />
+          <div class="mt-3 h-1 w-8 rounded bg-brand-500" />
+          <div class="mt-3 space-y-1">
+            <div class="h-1.5 rounded bg-gray-200" />
+            <div class="h-1.5 w-10/12 rounded bg-gray-200" />
+            <div class="h-1.5 w-8/12 rounded bg-gray-200" />
+          </div>
+          <div class="mt-3 flex gap-1">
+            <span class="h-3 w-8 rounded bg-brand-100" />
+            <span class="h-3 w-6 rounded bg-brand-100" />
+            <span class="h-3 w-9 rounded bg-brand-100" />
+          </div>
+        </div>
+      </div>
+
+      <div class="relative max-w-xl">
+        <p class="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur">
+          <Sparkles :size="13" /> {{ greeting }}
+        </p>
+        <h1 class="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">What are we writing today?</h1>
+        <p class="mt-2 max-w-md text-white/80">
+          Pick a document and answer a few questions — FirstDraft writes it with you, live.
+        </p>
+      </div>
+    </section>
 
     <!-- One-click starters -->
-    <div class="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div class="relative z-10 -mt-6 grid grid-cols-2 gap-3 px-2 sm:px-4 lg:grid-cols-4">
       <RouterLink
         v-for="starter in STARTERS"
         :key="starter.type"
         :to="{ path: '/app/draft/new', query: { start: starter.type } }"
-        class="card group flex flex-col p-4 transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-pop sm:p-5"
+        class="card group flex flex-col p-4 transition hover:-translate-y-1 hover:shadow-pop sm:p-5"
       >
-        <span class="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-600 transition group-hover:bg-brand-600 group-hover:text-white">
+        <span class="grid h-11 w-11 place-items-center rounded-xl text-white transition group-hover:scale-105" :class="starter.tile">
           <component :is="starter.icon" :size="20" />
         </span>
-        <span class="mt-4 flex items-center gap-1 font-semibold text-ink">
+        <span class="mt-4 flex items-center gap-1 font-bold text-ink">
           {{ DOCUMENT_TYPES[starter.type] }}
           <ArrowRight :size="15" class="-translate-x-1 opacity-0 transition group-hover:translate-x-0 group-hover:opacity-100" />
         </span>
@@ -90,21 +113,24 @@ async function removeDraft(draft) {
 
     <!-- Drafts -->
     <section class="mt-12">
-      <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-ink">
+      <div class="mb-5 flex items-end justify-between">
+        <h2 class="text-xl font-bold tracking-tight text-ink">
           Your drafts
-          <span v-if="!loading && draftStore.drafts.length" class="ml-1 text-sm font-normal text-muted">
-            {{ draftStore.drafts.length }}
+          <span v-if="!loading && drafts.length" class="ml-1.5 rounded-full bg-brand-100 px-2 py-0.5 align-middle text-xs font-semibold text-brand-700">
+            {{ drafts.length }}
           </span>
         </h2>
+        <RouterLink to="/app/draft/new" class="btn-ghost -mr-2 py-1.5 text-brand-700">
+          <Plus :size="16" /> New draft
+        </RouterLink>
       </div>
 
-      <div v-if="loading" class="card divide-y divide-line">
-        <div v-for="i in 3" :key="i" class="flex items-center gap-4 p-4">
-          <div class="h-10 w-10 animate-pulse rounded-lg bg-subtle" />
-          <div class="flex-1 space-y-2">
-            <div class="h-3 w-1/3 animate-pulse rounded bg-subtle" />
-            <div class="h-2.5 w-1/5 animate-pulse rounded bg-subtle" />
+      <div v-if="loading" class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <div v-for="i in 4" :key="i" class="card overflow-hidden">
+          <div class="aspect-[4/3] animate-pulse bg-subtle" />
+          <div class="space-y-2 p-4">
+            <div class="h-3 w-2/3 animate-pulse rounded bg-subtle" />
+            <div class="h-2.5 w-1/3 animate-pulse rounded bg-subtle" />
           </div>
         </div>
       </div>
@@ -115,45 +141,56 @@ async function removeDraft(draft) {
       </div>
 
       <div
-        v-else-if="!draftStore.drafts.length"
-        class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-line-strong bg-surface/60 px-6 py-14 text-center"
+        v-else-if="!drafts.length"
+        class="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-brand-200 bg-white/60 px-6 py-16 text-center"
       >
-        <span class="grid h-12 w-12 place-items-center rounded-xl bg-brand-50 text-brand-600">
-          <FileText :size="22" />
+        <span class="grid h-14 w-14 place-items-center rounded-2xl bg-brand-gradient text-white shadow-glow">
+          <FileText :size="24" />
         </span>
-        <h3 class="mt-4 font-semibold text-ink">No drafts yet</h3>
+        <h3 class="mt-5 text-lg font-bold text-ink">No drafts yet</h3>
         <p class="mt-1 max-w-sm text-sm text-muted">Pick a document above — FirstDraft will guide you through it.</p>
       </div>
 
-      <ul v-else class="card divide-y divide-line overflow-hidden">
-        <li v-for="draft in draftStore.drafts" :key="draft.id" class="group relative">
-          <RouterLink :to="`/app/draft/${draft.id}`" class="flex items-center gap-4 p-4 pr-14 transition hover:bg-subtle/70">
-            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-subtle text-ink-2 group-hover:bg-brand-50 group-hover:text-brand-600">
-              <component :is="typeIcons[typeOf(draft)] || FileText" :size="18" />
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate font-medium text-ink">{{ draft.title || "Untitled Draft" }}</span>
-              <span class="block text-sm text-muted">
-                {{ DOCUMENT_TYPES[typeOf(draft)] }} · Edited {{ relativeTime(draft.updated_at || draft.created_at) }}
+      <ul v-else class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <li v-for="draft in drafts" :key="draft.id" class="group relative">
+          <RouterLink
+            :to="`/app/draft/${draft.id}`"
+            class="card block overflow-hidden transition hover:-translate-y-1 hover:shadow-pop"
+          >
+            <!-- Mini preview -->
+            <div class="desk relative flex aspect-[4/3] justify-center overflow-hidden px-4 pt-4">
+              <div v-if="!draft.empty" class="overflow-hidden rounded-t-md shadow-paper ring-1 ring-black/5 transition group-hover:scale-[1.03]">
+                <DocumentThumb :document="draft.doc" :design="draft.template" :width="150" />
+              </div>
+              <div v-else class="flex flex-col items-center justify-center text-center">
+                <span class="grid h-12 w-12 place-items-center rounded-xl text-white" :class="docTypeStyle(typeOf(draft)).tile">
+                  <component :is="docTypeStyle(typeOf(draft)).icon" :size="22" />
+                </span>
+                <span class="mt-2 text-xs font-medium text-muted">Just started</span>
+              </div>
+            </div>
+            <div class="border-t border-line p-3.5">
+              <span class="block truncate pr-6 text-sm font-bold text-ink">{{ draft.title || "Untitled Draft" }}</span>
+              <span class="mt-1 flex items-center gap-1.5 text-xs text-muted">
+                <span class="rounded-full px-1.5 py-px text-[10.5px] font-semibold" :class="docTypeStyle(typeOf(draft)).soft">
+                  {{ DOCUMENT_TYPES[typeOf(draft)] }}
+                </span>
+                {{ relativeTime(draft.updated_at || draft.created_at) }}
               </span>
-            </span>
+            </div>
           </RouterLink>
 
           <button
-            class="icon-btn absolute right-3 top-1/2 -translate-y-1/2 hover:!bg-red-50 hover:!text-red-600 sm:opacity-0 sm:focus:opacity-100 sm:group-hover:opacity-100"
+            class="absolute bottom-3 right-2 grid h-8 w-8 place-items-center rounded-lg text-muted transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:focus:opacity-100 sm:group-hover:opacity-100"
             :aria-label="`Delete ${draft.title}`"
             :disabled="deletingId === draft.id"
             @click="removeDraft(draft)"
           >
-            <Loader2 v-if="deletingId === draft.id" :size="16" class="animate-spin" />
-            <Trash2 v-else :size="16" />
+            <Loader2 v-if="deletingId === draft.id" :size="15" class="animate-spin" />
+            <Trash2 v-else :size="15" />
           </button>
         </li>
       </ul>
     </section>
-
-    <RouterLink to="/app/draft/new" class="btn-secondary mt-6 md:hidden">
-      <Plus :size="17" /> New draft
-    </RouterLink>
   </div>
 </template>

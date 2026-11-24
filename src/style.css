@@ -124,6 +124,9 @@
   .doc-bleed-top {
     margin-top: calc(-1 * var(--page-py, 0px));
   }
+  .doc-bleed-bottom {
+    margin-bottom: calc(-1 * var(--page-py, 0px));
+  }
 
   /* Click-to-edit text in the preview */
   .editable {

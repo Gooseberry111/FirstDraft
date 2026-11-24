@@ -15,7 +15,7 @@ const emit = defineEmits(["close"]);
   <Transition name="fade">
     <div
       v-if="open"
-      class="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 backdrop-blur-sm sm:items-center sm:p-4"
+      class="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center sm:p-4"
       @click.self="emit('close')"
       @keydown.esc="emit('close')"
     >
@@ -25,7 +25,7 @@ const emit = defineEmits(["close"]);
         role="dialog"
         :aria-label="title"
       >
-        <header class="flex items-center gap-3 border-b border-line bg-white/80 px-5 py-4">
+        <header class="flex items-center gap-3 border-b border-line bg-surface/80 px-5 py-4">
           <span v-if="icon" class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-gradient text-white shadow-glow">
             <component :is="icon" :size="18" />
           </span>

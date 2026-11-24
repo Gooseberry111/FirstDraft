@@ -16,7 +16,7 @@ import {
 import ScoreRing from "./ScoreRing.vue";
 import { analyzeDocument, gradeFor } from "@/services/quality";
 import { reviewDocument } from "@/services/ai";
-import { DOCUMENT_TYPES, isProseDocument } from "@/services/documentBuilder";
+import { DOCUMENT_TYPES, docNoun, isProseDocument } from "@/services/documentBuilder";
 
 // Slide-over showing how strong the document is:
 // - Quick check: instant, rule-based (no AI request)
@@ -32,6 +32,7 @@ const emit = defineEmits(["close", "fix", "usage"]);
 const tab = ref("quick");
 const quick = computed(() => analyzeDocument(props.document));
 const typeLabel = computed(() => DOCUMENT_TYPES[props.document.documentType] || "document");
+const noun = computed(() => docNoun(props.document.documentType));
 const isResume = computed(() => !isProseDocument(props.document.documentType));
 const expanded = ref(new Set());
 
@@ -124,7 +125,7 @@ const barColor = (score) =>
 
 <template>
   <Transition name="fade">
-    <div v-if="open" class="fixed inset-0 z-40 bg-ink/30 backdrop-blur-[2px]" @click="emit('close')" />
+    <div v-if="open" class="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" @click="emit('close')" />
   </Transition>
   <Transition
     enter-active-class="transition duration-300 ease-out"
@@ -140,19 +141,19 @@ const barColor = (score) =>
       @keydown.esc="emit('close')"
     >
       <!-- Header -->
-      <header class="flex items-center gap-3 border-b border-line bg-white/80 px-5 py-4 backdrop-blur">
+      <header class="flex items-center gap-3 border-b border-line bg-surface/80 px-5 py-4 backdrop-blur">
         <span class="grid h-9 w-9 place-items-center rounded-xl bg-brand-gradient text-white shadow-glow">
           <Gauge :size="18" />
         </span>
         <div class="min-w-0 flex-1">
-          <h2 class="font-bold text-ink">How strong is your {{ typeLabel.toLowerCase() }}?</h2>
-          <p class="text-xs text-muted">Measured against professional standards</p>
+          <h2 class="font-bold text-ink">How strong is your {{ noun }}?</h2>
+          <p class="text-xs text-muted">Checked against what recruiters look for</p>
         </div>
         <button class="icon-btn" aria-label="Close" @click="emit('close')"><X :size="18" /></button>
       </header>
 
       <!-- Tabs -->
-      <div class="flex gap-1 border-b border-line bg-white/60 px-5 pt-2">
+      <div class="flex gap-1 border-b border-line bg-surface/60 px-5 pt-2">
         <button
           v-for="t in [
             { id: 'quick', label: 'Quick check', icon: Gauge },
@@ -175,14 +176,14 @@ const barColor = (score) =>
             <div>
               <p class="text-xl font-extrabold text-ink">{{ quick.label }}</p>
               <p class="mt-1 text-sm text-muted">
-                Instant check of {{ quick.categories.reduce((n, c) => n + c.checks.length, 0) }} standards. Updates as you write — no AI needed.
+                Checks {{ quick.categories.reduce((n, c) => n + c.checks.length, 0) }} things recruiters look for. Updates as you type.
               </p>
             </div>
           </div>
 
           <!-- Top fixes -->
           <section v-if="topFixes.length" class="mt-6">
-            <h3 class="mb-2.5 text-xs font-bold uppercase tracking-wider text-muted">Biggest wins</h3>
+            <h3 class="mb-2.5 text-xs font-bold uppercase tracking-wider text-muted">Fix these first</h3>
             <ul class="space-y-2.5">
               <li v-for="issue in topFixes" :key="issue.id" class="card p-4">
                 <div class="flex items-start gap-3">
@@ -201,7 +202,7 @@ const barColor = (score) =>
             </ul>
           </section>
           <div v-else class="mt-6 rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-800 ring-1 ring-emerald-200">
-            Every quick check passes. Try an Expert review for deeper feedback.
+            Everything here passes. Try an expert review for more detailed feedback.
           </div>
 
           <!-- All categories -->
@@ -249,10 +250,10 @@ const barColor = (score) =>
         <template v-else>
           <div v-if="!review || outdated" class="card p-5">
             <p class="font-semibold text-ink">
-              {{ review ? "Your document changed since the last review" : `Get an expert review of your ${typeLabel.toLowerCase()}` }}
+              {{ review ? "You've made changes since the last review" : `Get an expert review of your ${noun}` }}
             </p>
             <p class="mt-1 text-sm text-muted">
-              Graded the way a {{ isResume ? "recruiter" : document.documentType === "essay" ? "admissions reader" : "hiring manager" }} would — with specific rewrites. Uses 1 of your daily messages.
+              Read and marked the way a {{ isResume ? "recruiter" : document.documentType === "essay" ? "admissions reader" : "hiring manager" }} would, with suggested rewrites. Uses 1 of your daily messages.
             </p>
 
             <label v-if="isResume || document.documentType === 'cover_letter'" class="mt-4 block">
@@ -263,8 +264,8 @@ const barColor = (score) =>
                 v-model="jobDescription"
                 rows="4"
                 maxlength="8000"
-                placeholder="Paste the job description to see your match score and missing keywords…"
-                class="scrollbar-thin mt-1.5 w-full resize-y rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-faint focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100"
+                placeholder="Paste the job ad to see how well you match and which keywords are missing"
+                class="scrollbar-thin mt-1.5 w-full resize-y rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-faint focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100"
               />
             </label>
 
@@ -298,14 +299,14 @@ const barColor = (score) =>
               </div>
               <template v-if="review.missingKeywords.length">
                 <p class="mt-4 text-sm font-semibold text-ink-2">Missing keywords from the posting</p>
-                <p class="text-xs text-muted">Only add the ones you genuinely have — tap one to add it with the AI.</p>
+                <p class="text-xs text-muted">Only add the ones you really have. Tap one and FirstDraft will help you add it.</p>
                 <div class="mt-2.5 flex flex-wrap gap-1.5">
                   <button
                     v-for="kw in review.missingKeywords"
                     :key="kw"
                     class="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-200 transition hover:bg-brand-100 disabled:opacity-50"
                     :disabled="busy"
-                    @click="fix(`I have experience with ${kw}. Please work it into my ${typeLabel.toLowerCase()} where it fits — ask me for specifics first.`)"
+                    @click="fix(`I have experience with ${kw}. Please work it into my ${noun} where it fits. Ask me for the details first.`)"
                   >
                     + {{ kw }}
                   </button>
@@ -329,7 +330,7 @@ const barColor = (score) =>
 
             <!-- Strengths -->
             <section v-if="review.strengths.length" class="mt-6">
-              <h3 class="mb-2.5 text-xs font-bold uppercase tracking-wider text-muted">What's working</h3>
+              <h3 class="mb-2.5 text-xs font-bold uppercase tracking-wider text-muted">What's good</h3>
               <ul class="space-y-2">
                 <li v-for="(s, i) in review.strengths" :key="i" class="flex items-start gap-2.5 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-900 ring-1 ring-emerald-200">
                   <Check :size="15" class="mt-0.5 shrink-0 text-emerald-600" /> {{ s }}

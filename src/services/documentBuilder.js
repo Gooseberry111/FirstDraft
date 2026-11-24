@@ -1,9 +1,16 @@
+import { cleanDashes } from "@/utils/format";
+
 export const DOCUMENT_TYPES = {
   resume: "Resume",
   cv: "CV",
   cover_letter: "Cover Letter",
   essay: "Essay",
 };
+
+// How to name a document type inside a sentence: "your CV", "your cover letter".
+export function docNoun(documentType) {
+  return { resume: "resume", cv: "CV", cover_letter: "cover letter", essay: "essay" }[documentType] || "document";
+}
 
 export function isProseDocument(documentType) {
   return documentType === "cover_letter" || documentType === "essay";
@@ -43,7 +50,7 @@ const text = (value) => {
   if (value == null) return "";
   if (Array.isArray(value)) return value.map(text).filter(Boolean).join("\n");
   if (typeof value === "object") return Object.values(value).map(text).join(" ");
-  return String(value).trim();
+  return cleanDashes(String(value).trim());
 };
 
 const textList = (value) => {

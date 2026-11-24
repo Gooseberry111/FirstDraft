@@ -93,15 +93,15 @@ async function removeDraft(draft) {
         </p>
         <h1 class="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">What are we writing today?</h1>
         <p class="mt-2 max-w-md text-white/80">
-          Pick a document and answer a few questions — FirstDraft writes it with you, live.
+          Pick a document, answer a few questions, and you'll see it come together as you go.
         </p>
         <button
-          class="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 shadow-lg transition hover:-translate-y-0.5 hover:bg-brand-50"
+          class="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-[#5a2fd6] shadow-lg transition hover:-translate-y-0.5 hover:bg-[#f4f1ff]"
           @click="pickFile"
         >
           <FileUp :size="17" /> Import an existing CV
         </button>
-        <p class="mt-2 text-xs text-white/70">PDF, Word or text — rebuilt and scored in seconds</p>
+        <p class="mt-2 text-xs text-white/70">Works with PDF, Word and text files</p>
       </div>
     </section>
     <ImportProgress :importing="importing" :stage="stage" :error="importError" @dismiss="importError = ''" />
@@ -156,13 +156,13 @@ async function removeDraft(draft) {
 
       <div
         v-else-if="!drafts.length"
-        class="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-brand-200 bg-white/60 px-6 py-16 text-center"
+        class="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-brand-200 bg-surface/60 px-6 py-16 text-center"
       >
         <span class="grid h-14 w-14 place-items-center rounded-2xl bg-brand-gradient text-white shadow-glow">
           <FileText :size="24" />
         </span>
         <h3 class="mt-5 text-lg font-bold text-ink">No drafts yet</h3>
-        <p class="mt-1 max-w-sm text-sm text-muted">Pick a document above — FirstDraft will guide you through it.</p>
+        <p class="mt-1 max-w-sm text-sm text-muted">Choose one of the options above to get started.</p>
       </div>
 
       <ul v-else class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -175,7 +175,7 @@ async function removeDraft(draft) {
             <div class="desk relative flex aspect-[4/3] justify-center overflow-hidden px-4 pt-4">
               <span
                 v-if="draft.score !== null"
-                class="absolute right-2.5 top-2.5 z-10 rounded-full bg-white p-0.5 shadow-card"
+                class="absolute right-2.5 top-2.5 z-10 rounded-full bg-surface p-0.5 shadow-card"
                 :title="`Strength: ${draft.score}/100`"
               >
                 <ScoreRing :score="draft.score" :size="34" :stroke="3.5" />

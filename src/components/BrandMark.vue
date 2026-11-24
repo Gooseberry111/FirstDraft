@@ -8,7 +8,7 @@ defineProps({
   <span class="inline-flex items-center gap-2.5">
     <span
       :class="size === 'lg' ? 'h-9 w-9' : 'h-7 w-7'"
-      class="grid shrink-0 place-items-center rounded-lg bg-brand-600 shadow-sm"
+      class="grid shrink-0 place-items-center rounded-lg bg-brand-gradient shadow-sm"
       aria-hidden="true"
     >
       <svg viewBox="0 0 32 32" :class="size === 'lg' ? 'h-6 w-6' : 'h-5 w-5'">

@@ -2,6 +2,7 @@
 import { Plus, ArrowLeft, X } from "lucide-vue-next";
 import { docTypeStyle } from "@/utils/docTypes";
 import BrandMark from "@/components/BrandMark.vue";
+import ThemeToggle from "@/components/ThemeToggle.vue";
 import { relativeTime } from "@/utils/format";
 
 defineProps({
@@ -15,14 +16,17 @@ defineEmits(["close"]);
 </script>
 
 <template>
-  <div class="flex h-full w-full flex-col bg-white/90 backdrop-blur-xl">
+  <div class="flex h-full w-full flex-col bg-surface/90 backdrop-blur-xl">
     <div class="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
       <RouterLink to="/app/dashboard" aria-label="Back to dashboard">
         <BrandMark />
       </RouterLink>
-      <button v-if="closable" class="icon-btn" aria-label="Close drafts" @click="$emit('close')">
-        <X :size="18" />
-      </button>
+      <div class="flex items-center gap-1">
+        <ThemeToggle />
+        <button v-if="closable" class="icon-btn" aria-label="Close drafts" @click="$emit('close')">
+          <X :size="18" />
+        </button>
+      </div>
     </div>
 
     <div class="space-y-1 p-3">

@@ -81,7 +81,7 @@ const today = new Date().toLocaleDateString(undefined, {
       multiline
       :path="['recipient']"
       :value="document.recipient"
-      placeholder="Recipient — e.g. Hiring Manager, Company name"
+      placeholder="Who it's for, e.g. Hiring Manager, Company name"
     />
 
     <p

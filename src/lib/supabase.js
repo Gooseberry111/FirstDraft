@@ -9,4 +9,20 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// A stalled request (weak mobile signal, sleeping tab) must never hang the
+// app: give every Supabase request a time limit so it fails and can be retried.
+const REQUEST_TIMEOUT_MS = 20_000;
+
+function fetchWithTimeout(input, init = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  init.signal?.addEventListener("abort", () => controller.abort());
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: { fetch: fetchWithTimeout },
+});
+
+export const isTimeoutError = (error) =>
+  error?.name === "AbortError" || /abort|timed? ?out|failed to fetch|network/i.test(error?.message || "");

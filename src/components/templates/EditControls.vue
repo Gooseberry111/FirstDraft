@@ -29,7 +29,7 @@ const edit = useEditing();
     <button
       v-else
       type="button"
-      class="mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-sans text-[12px] font-medium text-brand-600 opacity-0 transition hover:bg-brand-50 focus:opacity-100 group-hover/section:opacity-100"
+      class="mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-sans text-[12px] font-medium text-[#6a3ef0] opacity-0 transition hover:bg-[#f3f0ff] focus:opacity-100 group-hover/section:opacity-100"
       @click="edit.add(section)"
     >
       <Plus :size="13" /> {{ label }}

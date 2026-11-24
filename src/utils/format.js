@@ -1,3 +1,18 @@
+// Removes long dashes (a tell-tale sign of AI writing). Ranges like
+// "2019–2022" or "Jan 2023 — Present" become "2019 - 2022"; dashes used as
+// punctuation become commas.
+const RANGE_DASH =
+  /(\w)\s*[–—]\s*(?=\d|present|now|current|today|ongoing|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/gi;
+
+export function cleanDashes(value) {
+  if (typeof value !== "string" || !/[–—]/.test(value)) return value;
+  return value
+    .replace(RANGE_DASH, "$1 - ")
+    .replace(/\s*[–—]\s*/g, ", ")
+    .replace(/,\s*([,.;:!?)])/g, "$1")
+    .replace(/^\s*,\s*/gm, "");
+}
+
 const escapeHtml = (value) =>
   value
     .replace(/&/g, "&amp;")
@@ -16,7 +31,7 @@ const inline = (value) =>
 // numbered lists, bold, italics, inline code). Input is HTML-escaped first,
 // so the result is safe to use with v-html.
 export function formatMessage(content = "") {
-  const lines = escapeHtml(content).split(/\r?\n/);
+  const lines = escapeHtml(cleanDashes(content)).split(/\r?\n/);
   const html = [];
   let list = null;
   let paragraph = [];

@@ -5,7 +5,7 @@ import { ArrowRight, Check, FileText, Loader2, Mail, Target } from "lucide-vue-n
 import BaseModal from "@/components/BaseModal.vue";
 import { tailorDocument } from "@/services/ai";
 import { useDraftStore } from "@/stores/draft";
-import { DOCUMENT_TYPES } from "@/services/documentBuilder";
+import { DOCUMENT_TYPES, docNoun } from "@/services/documentBuilder";
 import { formatDesign, parseDesign } from "@/components/templates/themes";
 
 // Paste a job posting → a tailored copy of this resume/CV + a matching cover
@@ -28,6 +28,7 @@ const error = ref("");
 const result = ref(null); // { changes, missingKeywords, resumeId, letterId, company, jobTitle }
 
 const typeLabel = computed(() => DOCUMENT_TYPES[props.document.documentType] || "Resume");
+const noun = computed(() => docNoun(props.document.documentType));
 const canSubmit = computed(() => posting.value.trim().length >= 40 && (makeResume.value || makeLetter.value) && !working.value);
 
 watch(
@@ -54,15 +55,15 @@ async function tailor() {
 
     if (makeResume.value) {
       const draft = await draftStore.createDraftFrom({
-        title: `${name ? `${name} — ` : ""}${typeLabel.value} (${t.company || "tailored"})`,
+        title: `${name ? `${name}'s ${noun.value}` : typeLabel.value} for ${t.company || t.jobTitle || "a new job"}`,
         document: { ...t.resume, targetRole: t.jobTitle || t.resume.targetRole },
         template: props.design || null,
         messages: [
-          { role: "user", content: `Tailor my ${typeLabel.value.toLowerCase()} for ${where}.` },
+          { role: "user", content: `Tailor my ${noun.value} for ${where}.` },
           {
             role: "assistant",
             content:
-              `Here's your ${typeLabel.value.toLowerCase()} tailored for **${where}**. What I changed:\n\n` +
+              `Here's your ${noun.value} tailored for **${where}**. Here's what I changed:\n\n` +
               t.changes.map((c) => `- ${c}`).join("\n") +
               (t.missingKeywords.length
                 ? `\n\nThe posting also asks for: ${t.missingKeywords.join(", ")}. If you genuinely have any of these, tell me and I'll add them.`
@@ -75,14 +76,14 @@ async function tailor() {
 
     if (makeLetter.value) {
       const draft = await draftStore.createDraftFrom({
-        title: `Cover letter — ${t.company || t.jobTitle || "tailored"}`,
+        title: `Cover letter for ${t.company || t.jobTitle || "a new job"}`,
         document: t.coverLetter,
         template: formatDesign({ style: "modern", accent }),
         messages: [
           { role: "user", content: `Write a cover letter for ${where}.` },
           {
             role: "assistant",
-            content: `Your cover letter for **${where}** is in the preview — written only from facts in your ${typeLabel.value.toLowerCase()}. Want to add a personal reason you're excited about ${t.company || "the company"}? That's what makes a letter stand out.`,
+            content: `Your cover letter for **${where}** is in the preview. I only used facts from your ${noun.value}. Do you have a personal reason for wanting to work at ${t.company || "this company"}? Adding one usually makes a letter much stronger.`,
           },
         ],
       });
@@ -107,7 +108,7 @@ function openDraft(id) {
   <BaseModal
     :open="open"
     title="Tailor to a job"
-    :subtitle="result ? 'Done — your original is unchanged' : 'Creates new drafts — your original stays as it is'"
+    :subtitle="result ? 'Done. Your original hasn\'t changed.' : 'Makes new drafts and leaves your original alone'"
     :icon="Target"
     @close="emit('close')"
   >
@@ -128,7 +129,7 @@ function openDraft(id) {
 
       <template v-if="result.missingKeywords.length">
         <h3 class="mb-1 mt-5 text-xs font-bold uppercase tracking-wider text-muted">The posting also asks for</h3>
-        <p class="mb-2 text-xs text-muted">Add these only if they're true for you — just tell FirstDraft in the chat.</p>
+        <p class="mb-2 text-xs text-muted">Only add these if they're true for you. Just mention them in the chat.</p>
         <div class="flex flex-wrap gap-1.5">
           <span v-for="kw in result.missingKeywords" :key="kw" class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200">
             {{ kw }}
@@ -138,7 +139,7 @@ function openDraft(id) {
 
       <div class="mt-6 grid gap-2.5 sm:grid-cols-2">
         <button v-if="result.resumeId" class="btn-primary py-3" @click="openDraft(result.resumeId)">
-          <FileText :size="16" /> Open tailored {{ typeLabel.toLowerCase() }}
+          <FileText :size="16" /> Open tailored {{ noun }}
         </button>
         <button v-if="result.letterId" class="btn-secondary py-3" @click="openDraft(result.letterId)">
           <Mail :size="16" /> Open cover letter
@@ -155,8 +156,8 @@ function openDraft(id) {
           rows="8"
           maxlength="8000"
           required
-          placeholder="Paste the full job description here — title, company, responsibilities and requirements…"
-          class="scrollbar-thin mt-1.5 w-full resize-y rounded-xl border border-line bg-white px-3.5 py-3 text-sm text-ink placeholder:text-faint focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100"
+          placeholder="Paste the whole job ad here, including the title, company and requirements"
+          class="scrollbar-thin mt-1.5 w-full resize-y rounded-xl border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-faint focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100"
         />
       </label>
 
@@ -164,11 +165,11 @@ function openDraft(id) {
       <div class="grid gap-2 sm:grid-cols-2">
         <label
           v-for="opt in [
-            { model: makeResume, set: (v) => (makeResume = v), icon: FileText, label: `Tailored ${typeLabel.toLowerCase()}`, hint: 'Reordered & reworded for this job' },
-            { model: makeLetter, set: (v) => (makeLetter = v), icon: Mail, label: 'Matching cover letter', hint: '~300 words, from your real experience' },
+            { model: makeResume, set: (v) => (makeResume = v), icon: FileText, label: `Tailored ${noun}`, hint: 'Reordered and reworded for this job' },
+            { model: makeLetter, set: (v) => (makeLetter = v), icon: Mail, label: 'Matching cover letter', hint: 'About 300 words, using your real experience' },
           ]"
           :key="opt.label"
-          class="flex cursor-pointer items-start gap-3 rounded-xl border bg-white p-3.5 transition"
+          class="flex cursor-pointer items-start gap-3 rounded-xl border bg-surface p-3.5 transition"
           :class="opt.model ? 'border-brand-400 ring-4 ring-brand-100' : 'border-line hover:border-line-strong'"
         >
           <input type="checkbox" class="mt-1 accent-[#6a3ef0]" :checked="opt.model" @change="opt.set($event.target.checked)" />
@@ -180,7 +181,7 @@ function openDraft(id) {
       </div>
 
       <p class="mt-4 rounded-xl bg-brand-50/70 px-3.5 py-2.5 text-xs text-ink-2 ring-1 ring-brand-100">
-        FirstDraft only reorders and rephrases what's already in your {{ typeLabel.toLowerCase() }} — it never adds skills or experience you haven't told it about.
+        FirstDraft only reorders and rewords what's already in your {{ noun }}. It won't add skills or experience you haven't mentioned.
       </p>
 
       <p v-if="error" class="mt-3 rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700 ring-1 ring-rose-200">{{ error }}</p>
@@ -188,7 +189,7 @@ function openDraft(id) {
       <button type="submit" class="btn-primary mt-5 w-full py-3" :disabled="!canSubmit">
         <Loader2 v-if="working" :size="17" class="animate-spin" />
         <Target v-else :size="17" />
-        {{ working ? "Tailoring… (about 5 seconds)" : "Tailor it" }}
+        {{ working ? "Working on it, about 5 seconds" : "Tailor it" }}
         <ArrowRight v-if="!working" :size="16" />
       </button>
       <p class="mt-2 text-center text-xs text-muted">Uses 1 of your daily messages.</p>

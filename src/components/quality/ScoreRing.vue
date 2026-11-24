@@ -26,7 +26,7 @@ const color = computed(() => {
 <template>
   <div class="relative inline-grid shrink-0 place-items-center" :style="{ width: `${size}px`, height: `${size}px` }">
     <svg :width="size" :height="size" class="-rotate-90" aria-hidden="true">
-      <circle :cx="size / 2" :cy="size / 2" :r="radius" fill="none" stroke="#ede9f6" :stroke-width="stroke" />
+      <circle :cx="size / 2" :cy="size / 2" :r="radius" fill="none" stroke="rgb(var(--c-line))" :stroke-width="stroke" />
       <circle
         :cx="size / 2"
         :cy="size / 2"

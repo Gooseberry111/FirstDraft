@@ -3,6 +3,7 @@ import { ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { LayoutDashboard, User, Settings, Plus, LogOut, Menu, X } from "lucide-vue-next";
 import BrandMark from "@/components/BrandMark.vue";
+import ThemeToggle from "@/components/ThemeToggle.vue";
 import { useAuthStore } from "@/stores/auth";
 
 const auth = useAuthStore();
@@ -32,9 +33,12 @@ async function signOut() {
     <!-- Mobile top bar -->
     <header class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur md:hidden">
       <RouterLink to="/app/dashboard" aria-label="FirstDraft home"><BrandMark /></RouterLink>
-      <button class="icon-btn" aria-label="Open menu" @click="mobileNavOpen = true">
-        <Menu :size="20" />
-      </button>
+      <div class="flex items-center gap-1">
+        <ThemeToggle />
+        <button class="icon-btn" aria-label="Open menu" @click="mobileNavOpen = true">
+          <Menu :size="20" />
+        </button>
+      </div>
     </header>
 
     <Transition name="fade">
@@ -44,7 +48,7 @@ async function signOut() {
     <!-- Sidebar -->
     <aside
       :class="mobileNavOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'"
-      class="fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-line/80 bg-white/80 backdrop-blur-xl transition-transform duration-200 md:sticky md:top-0 md:h-screen"
+      class="fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-line/80 bg-surface/80 backdrop-blur-xl transition-transform duration-200 md:sticky md:top-0 md:h-screen"
     >
       <div class="flex h-16 items-center justify-between px-5">
         <RouterLink to="/app/dashboard" aria-label="FirstDraft home"><BrandMark /></RouterLink>
@@ -79,6 +83,7 @@ async function signOut() {
             {{ auth.user?.email?.[0] || "?" }}
           </span>
           <span class="min-w-0 flex-1 truncate text-sm text-ink-2">{{ auth.user?.email }}</span>
+          <ThemeToggle class="hidden md:inline-flex" />
           <button class="icon-btn" aria-label="Sign out" title="Sign out" @click="signOut">
             <LogOut :size="17" />
           </button>

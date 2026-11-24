@@ -97,17 +97,17 @@ export const SAMPLE_RESUME = {
     {
       position: "Senior Product Designer",
       company: "Northwind",
-      date: "2022 – Present",
+      date: "2022 - Present",
       description: "Led the redesign of the mobile app, lifting retention by 18%\nBuilt and maintained the company design system",
     },
     {
       position: "Product Designer",
       company: "Bluebird Labs",
-      date: "2019 – 2022",
+      date: "2019 - 2022",
       description: "Shipped 12 features across web and mobile\nRan weekly user research sessions",
     },
   ],
-  education: [{ degree: "BA Interaction Design", school: "University of Texas", date: "2015 – 2019", details: "" }],
+  education: [{ degree: "BA Interaction Design", school: "University of Texas", date: "2015 - 2019", details: "" }],
   skills: ["Figma", "Prototyping", "User research", "Design systems", "HTML/CSS"],
   projects: [],
   certifications: ["Google UX Design Certificate"],
@@ -129,7 +129,7 @@ export const SAMPLE_LETTER = {
     "Dear Hiring Team,",
     "I'm excited to apply for the Senior Product Designer role. Over the past five years I've helped teams turn complex problems into simple, delightful products.",
     "At Northwind I led a redesign that lifted retention by 18%, and I'd love to bring that same focus on outcomes to your team.",
-    "Thank you for your time — I'd welcome the chance to talk.",
+    "Thanks for reading. I'd love the chance to talk.",
   ],
   closing: "Kind regards,",
 };
@@ -140,7 +140,7 @@ export const SAMPLE_ESSAY = {
   title: "What the Night Shift Taught Me",
   body: [
     "The first time I closed the café alone, I learned that responsibility is quiet. Nobody watches you mop the floor at midnight, but everyone notices when it isn't done.",
-    "Over two years of late shifts I learned to plan, to listen, and to stay calm when things went wrong — lessons I now bring to everything I do.",
+    "Over two years of late shifts I learned to plan, to listen, and to stay calm when things went wrong. I still lean on those lessons every week.",
     "Those nights shaped how I want to study and work: carefully, generously, and with pride in the unseen parts of the job.",
   ],
 };

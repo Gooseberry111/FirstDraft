@@ -72,13 +72,13 @@ function restore(version) {
     <div v-if="loading" class="grid place-items-center py-12 text-muted"><Loader2 :size="22" class="animate-spin" /></div>
     <p v-else-if="error" class="rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700 ring-1 ring-rose-200">{{ error }}</p>
     <p v-else-if="!versions.length" class="py-10 text-center text-sm text-muted">
-      No versions yet — they're saved automatically as your document changes.
+      No versions yet. FirstDraft saves one automatically as your document changes.
     </p>
 
     <ul v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3">
       <li v-for="(v, i) in versions" :key="v.id" class="card group overflow-hidden">
         <div class="desk relative flex justify-center px-3 pt-3">
-          <span class="absolute right-2 top-2 z-10 rounded-full bg-white p-0.5 shadow-card">
+          <span class="absolute right-2 top-2 z-10 rounded-full bg-surface p-0.5 shadow-card">
             <ScoreRing :score="v.score" :size="30" :stroke="3" />
           </span>
           <div class="overflow-hidden rounded-t shadow-paper ring-1 ring-black/5">

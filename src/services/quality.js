@@ -174,7 +174,7 @@ function analyzeResume(doc) {
         : warn("email", "Check your email address", "It doesn't look like a valid email."),
   );
   contact.push(info.phone ? pass("phone", "Phone number") : warn("phone", "Add a phone number", "Many recruiters call before they email."));
-  contact.push(info.location ? pass("location", "Location") : warn("location", "Add your city and country", "Recruiters filter by location — city and country is enough."));
+  contact.push(info.location ? pass("location", "Location") : warn("location", "Add your city and country", "Recruiters filter by location. City and country is enough."));
   contact.push(
     info.linkedin || info.website
       ? pass("links", "LinkedIn or portfolio link")
@@ -185,19 +185,19 @@ function analyzeResume(doc) {
   const summary = [];
   const sw = wordCount(doc.summary);
   if (!doc.summary) {
-    summary.push(fail("summary", "Add a professional summary", "2–4 lines: your title, years of experience, specialties and a signature achievement.", "Please write a strong professional summary for me."));
+    summary.push(fail("summary", "Add a professional summary", "2 to 4 lines: your title, years of experience, specialties and a signature achievement.", "Please write a strong professional summary for me."));
   } else {
     summary.push(
       sw < 20
-        ? warn("summary-length", "Summary is very short", "Aim for 2–4 lines (about 30–80 words).", "Please expand my summary to 2–4 strong lines.")
+        ? warn("summary-length", "Summary is very short", "Aim for 2 to 4 lines (about 30 to 80 words).", "Please expand my summary to 2 to 4 strong lines.")
         : sw > 90
-          ? warn("summary-length", "Summary is too long", "Keep it to 2–4 lines so it's read in 6 seconds.", "Please tighten my summary to 2–4 lines.")
+          ? warn("summary-length", "Summary is too long", "Keep it to 2 to 4 lines so it's read in 6 seconds.", "Please tighten my summary to 2 to 4 lines.")
           : pass("summary-length", "Summary length is right"),
     );
     const summaryCliches = found(doc.summary, CLICHES);
     summary.push(
       summaryCliches.length
-        ? fail("summary-cliches", `Summary relies on clichés (“${summaryCliches[0]}”)`, "Replace adjectives with your title, years of experience and a real achievement.", "Please rewrite my summary without clichés — lead with my title, experience and best result.", 2)
+        ? fail("summary-cliches", `Summary relies on clichés (“${summaryCliches[0]}”)`, "Replace adjectives with your title, years of experience and a real achievement.", "Please rewrite my summary without clichés. Lead with my title, experience and best result.", 2)
         : pass("summary-cliches", "Summary avoids clichés", 2),
     );
     summary.push(
@@ -214,7 +214,7 @@ function analyzeResume(doc) {
       fail(
         "experience",
         isCv ? "Add your experience" : "Add work experience",
-        "Include jobs, internships, volunteering or major projects — most recent first.",
+        "Include jobs, internships, volunteering or major projects. Most recent first.",
         "Let's add my work experience.",
       ),
     );
@@ -228,7 +228,7 @@ function analyzeResume(doc) {
     const thin = jobs.filter((j) => toLines(j.description).length < 2).length;
     exp.push(
       thin
-        ? warn("bullets", `${thin} role${thin > 1 ? "s have" : " has"} fewer than 2 bullet points`, "Recent roles should have 3–5 achievement bullets.", "Please help me add more achievement bullets to my experience.")
+        ? warn("bullets", `${thin} role${thin > 1 ? "s have" : " has"} fewer than 2 bullet points`, "Recent roles should have 3 to 5 achievement bullets.", "Please help me add more achievement bullets to my experience.")
         : pass("bullets", "Each role has enough bullet points"),
     );
     if (bullets.length) {
@@ -252,7 +252,7 @@ function analyzeResume(doc) {
               "numbers",
               `Only ${quantRate}% of bullets include numbers`,
               "Quantify impact: %, money, time saved, users, team size. Aim for at least half your bullets.",
-              "Please help me add measurable results to my experience bullets — ask me for any numbers you need.",
+              "Please help me add measurable results to my experience bullets. Ask me for any numbers you need.",
               3,
             ),
       );
@@ -265,7 +265,7 @@ function analyzeResume(doc) {
       const long = bullets.filter((b) => wordCount(b) > 32).length;
       exp.push(
         long
-          ? warn("bullet-length", `${long} bullet${long > 1 ? "s are" : " is"} too long`, "Keep bullets to 1–2 lines (under ~30 words).", "Please shorten my longest experience bullets.")
+          ? warn("bullet-length", `${long} bullet${long > 1 ? "s are" : " is"} too long`, "Keep bullets to 1 to 2 lines (under ~30 words).", "Please shorten my longest experience bullets.")
           : pass("bullet-length", "Bullets are concise"),
       );
       const firstWords = bullets.map((b) => lower(words(b)[0] || ""));
@@ -303,11 +303,11 @@ function analyzeResume(doc) {
   const count = doc.skills?.length || 0;
   skills.push(
     count === 0
-      ? fail("skills", "Add a skills section", "List 6–15 hard skills relevant to your target role (tools, languages, methods).", "Please help me build a strong skills section for my target role.")
+      ? fail("skills", "Add a skills section", "List 6 to 15 hard skills relevant to your target role (tools, languages, methods).", "Please help me build a strong skills section for my target role.")
       : count < 5
-        ? warn("skills", `Only ${count} skills listed`, "Aim for 6–15 relevant hard skills — they're key ATS keywords.", "Please suggest more relevant skills for my target role (only ones I actually have).")
+        ? warn("skills", `Only ${count} skills listed`, "Aim for 6 to 15 relevant hard skills. They're key ATS keywords.", "Please suggest more relevant skills for my target role (only ones I actually have).")
         : count > 20
-          ? warn("skills", `${count} skills is a lot`, "Keep the 10–15 most relevant so the important ones stand out.", "Please trim my skills to the most relevant 10–15.")
+          ? warn("skills", `${count} skills is a lot`, "Keep the 10 to 15 most relevant so the important ones stand out.", "Please trim my skills to the most relevant 10 to 15.")
           : pass("skills", `${count} skills listed`),
   );
   const soft = (doc.skills || []).filter((sk) => SOFT_SKILLS.some((s) => lower(sk).includes(s)));
@@ -331,13 +331,13 @@ function analyzeResume(doc) {
   const cliches = found(allText + " " + (doc.skills || []).join(" "), CLICHES);
   if (hasWriting) polish.push(
     cliches.length
-      ? warn("cliches", `Avoid buzzwords: “${cliches.slice(0, 3).join("”, “")}”`, "Recruiters skip clichés — prove the quality with a result instead.", "Please replace buzzwords in my resume with concrete evidence.", 2)
+      ? warn("cliches", `Avoid buzzwords: “${cliches.slice(0, 3).join("”, “")}”`, "Recruiters skip clichés. Prove the quality with a result instead.", "Please replace buzzwords in my resume with concrete evidence.", 2)
       : pass("cliches", "No clichés or buzzwords", 2),
   );
   if (!isCv && hasWriting) {
     polish.push(
       totalWords > 850
-        ? warn("length", `About ${totalWords} words — likely over 2 pages`, "Most resumes should be 1 page (under ~10 years' experience) or 2 at most.", "Please tighten my resume so it fits on 1–2 pages.")
+        ? warn("length", `About ${totalWords} words, probably over 2 pages`, "Most resumes should be 1 page (under ~10 years' experience) or 2 at most.", "Please tighten my resume so it fits on 1 to 2 pages.")
         : totalWords < 150 && jobs.length
           ? warn("length", "Resume is quite short", "Add detail to experience, projects or skills to fill one strong page.", "What else should I add to make my resume stronger?")
           : pass("length", "Good length"),
@@ -346,7 +346,7 @@ function analyzeResume(doc) {
   const datesWithYear = jobs.filter((j) => /\b(19|20)\d{2}\b/.test(j.date || "")).length;
   if (jobs.length) polish.push(
     datesWithYear < jobs.length
-      ? warn("dates", "Use clear dates with years", 'Use a consistent format like "Jan 2023 – Present".', "Please format all my dates consistently, e.g. Jan 2023 – Present.")
+      ? warn("dates", "Use clear dates with years", 'Use a consistent format like "Jan 2023 - Present".', "Please format all my dates consistently, e.g. Jan 2023 - Present.")
       : pass("dates", "Dates are clear"),
   );
 
@@ -376,15 +376,15 @@ function analyzeCoverLetter(doc) {
   } else {
     structure.push(
       wc < 200
-        ? (wc < 120 ? fail : warn)("length", `${wc} words — too short`, "Strong cover letters are 250–400 words.", "Please expand my cover letter to about 300 words with more specific evidence.", 2)
+        ? (wc < 120 ? fail : warn)("length", `Too short (${wc} words)`, "Strong cover letters are 250 to 400 words.", "Please expand my cover letter to about 300 words with more specific evidence.", 2)
         : wc > 450
-          ? warn("length", `${wc} words — too long`, "Keep it to 250–400 words; hiring managers skim.", "Please tighten my cover letter to under 400 words.", 2)
-          : pass("length", `${wc} words — ideal length`, 2),
+          ? warn("length", `Too long (${wc} words)`, "Keep it to 250 to 400 words; hiring managers skim.", "Please tighten my cover letter to under 400 words.", 2)
+          : pass("length", `Good length (${wc} words)`, 2),
     );
     structure.push(
       paragraphs >= 3 && paragraphs <= 5
         ? pass("paragraphs", `${paragraphs} clear paragraphs`)
-        : warn("paragraphs", "Use 3–4 body paragraphs", "Hook → evidence → why this company → confident close.", "Please restructure my cover letter into 3–4 focused paragraphs."),
+        : warn("paragraphs", "Use 3 to 4 body paragraphs", "Open with a hook, then your evidence, then why this company, and finish confidently.", "Please restructure my cover letter into 3 to 4 focused paragraphs."),
     );
     structure.push(
       /^\s*(i am writing|i'm writing|i would like to apply|please accept)/i.test(opening)
@@ -398,7 +398,7 @@ function analyzeCoverLetter(doc) {
     content.push(
       NUMBER_RE.test(text)
         ? pass("evidence", "Includes measurable evidence", 3)
-        : fail("evidence", "Add a measurable achievement", "One concrete result (%, $, time saved, users) makes your claims believable.", "Please add a measurable achievement to my cover letter — ask me for the numbers.", 3),
+        : fail("evidence", "Add a measurable achievement", "One concrete result (%, $, time saved, users) makes your claims believable.", "Please add a measurable achievement to my cover letter. Ask me for the numbers.", 3),
     );
     content.push(
       company && lower(text).includes(lower(company).split(/\s+/)[0])
@@ -460,15 +460,15 @@ function analyzeEssay(doc) {
   } else {
     structure.push(
       wc < 250
-        ? (wc < 150 ? fail : warn)("length", `${wc} words — too short`, "Most personal statements are 500–650 words. Check your required limit.", "Please develop my essay further with more specific detail.", 2)
+        ? (wc < 150 ? fail : warn)("length", `Too short (${wc} words)`, "Most personal statements are 500 to 650 words. Check your required limit.", "Please develop my essay further with more specific detail.", 2)
         : wc > 1000
-          ? warn("length", `${wc} words — check your limit`, "Many applications cap essays at 650 words.", "Please tighten my essay to fit the word limit.")
+          ? warn("length", `${wc} words, check your word limit`, "Many applications cap essays at 650 words.", "Please tighten my essay to fit the word limit.")
           : pass("length", `${wc} words`, 2),
     );
     structure.push(
       body.length >= 4
         ? pass("paragraphs", `${body.length} paragraphs`)
-        : (body.length < 3 ? fail : warn)("paragraphs", "Use at least 4 paragraphs", "Hook → story → reflection → forward-looking conclusion.", "Please restructure my essay into a clear opening, development and conclusion."),
+        : (body.length < 3 ? fail : warn)("paragraphs", "Use at least 4 paragraphs", "Open with a hook, tell the story, say what it taught you, then look ahead.", "Please restructure my essay into a clear opening, development and conclusion."),
     );
   }
 
@@ -477,18 +477,18 @@ function analyzeEssay(doc) {
     const cliches = found(text, ESSAY_CLICHES);
     voice.push(
       cliches.length
-        ? (cliches.length > 1 ? fail : warn)("cliches", `Avoid clichés: “${cliches[0]}”`, "Admissions readers see these constantly — open with a specific moment instead.", "Please replace the clichés in my essay with specific, personal details.", 2)
+        ? (cliches.length > 1 ? fail : warn)("cliches", `Avoid clichés: “${cliches[0]}”`, "Admissions readers see these constantly. Open with a specific moment instead.", "Please replace the clichés in my essay with specific, personal details.", 2)
         : pass("cliches", "No essay clichés", 2),
     );
     voice.push(
       /^(i have always|ever since|since i was|for as long as)/i.test(first.trim()) || wordCount(first) > 35
-        ? fail("hook", "Strengthen your opening line", "Start in a specific moment — a scene, a line of dialogue, a surprising detail.", "Please rewrite the opening of my essay as a vivid, specific hook.", 2)
+        ? fail("hook", "Strengthen your opening line", "Start in a specific moment. A scene, a line of dialogue, a surprising detail.", "Please rewrite the opening of my essay as a vivid, specific hook.", 2)
         : pass("hook", "Engaging opening", 2),
     );
     const tellWords = found(text, ["passionate", "hardworking", "hard-working", "dedicated", "determined", "resilient", "motivated"]);
     voice.push(
       tellWords.length > 2
-        ? warn("show", "Show, don't tell", `Words like “${tellWords[0]}” tell the reader — a specific example shows it.`, "Please replace adjectives that tell (like 'passionate') with specific examples that show.", 2)
+        ? warn("show", "Show, don't tell", `Words like “${tellWords[0]}” tell the reader. A specific example shows it.`, "Please replace adjectives that tell (like 'passionate') with specific examples that show.", 2)
         : pass("show", "Shows qualities through examples", 2),
     );
     voice.push(

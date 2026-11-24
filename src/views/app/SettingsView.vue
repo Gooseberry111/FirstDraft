@@ -1,10 +1,17 @@
 <script setup>
 import { ref } from "vue";
-import { Lock, Loader2, Check } from "lucide-vue-next";
+import { Lock, Loader2, Check, Sun, Moon, Monitor } from "lucide-vue-next";
+import { useTheme } from "@/composables/useTheme";
 import { useAuthStore } from "@/stores/auth";
 
 const MIN_PASSWORD = 8;
 const auth = useAuthStore();
+const { theme } = useTheme();
+const THEMES = [
+  { id: "light", label: "Light", icon: Sun },
+  { id: "dark", label: "Dark", icon: Moon },
+  { id: "system", label: "Match my device", icon: Monitor },
+];
 
 const password = ref("");
 const confirmPassword = ref("");
@@ -42,7 +49,25 @@ async function changePassword() {
 <template>
   <div class="mx-auto max-w-3xl px-4 py-8 sm:px-6 md:px-10 md:py-12">
     <h1 class="text-3xl font-semibold tracking-tight text-ink">Settings</h1>
-    <p class="mt-2 text-muted">Manage your account security.</p>
+    <p class="mt-2 text-muted">Appearance and account security.</p>
+
+    <section class="card mt-8 p-6">
+      <h2 class="font-semibold text-ink">Appearance</h2>
+      <p class="mt-1 text-sm text-muted">Your documents always print on white paper, whichever you choose.</p>
+      <div class="mt-5 grid gap-2.5 sm:grid-cols-3" role="radiogroup" aria-label="Theme">
+        <button
+          v-for="t in THEMES"
+          :key="t.id"
+          role="radio"
+          :aria-checked="theme === t.id"
+          class="flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-semibold transition"
+          :class="theme === t.id ? 'border-brand-400 bg-brand-50 text-brand-700 ring-4 ring-brand-100' : 'border-line text-ink-2 hover:border-line-strong hover:bg-subtle'"
+          @click="theme = t.id"
+        >
+          <component :is="t.icon" :size="17" /> {{ t.label }}
+        </button>
+      </div>
+    </section>
 
     <section class="card mt-8 p-6">
       <h2 class="font-semibold text-ink">Change password</h2>

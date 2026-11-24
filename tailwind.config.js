@@ -1,36 +1,32 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      // App colours are CSS variables (see style.css) so they switch with dark mode.
+      // The document "paper" uses fixed greys/accent colours and stays white.
       colors: {
-        // Light, lavender-tinted palette
-        canvas: "#f7f5fc", // app background
-        surface: "#ffffff", // panels, cards
-        subtle: "#f3f0fa", // hover, inputs, chips
-        line: "#e9e4f3", // borders
-        "line-strong": "#d9d1ea",
-        ink: "#1a1530", // primary text
-        "ink-2": "#4b4565", // secondary text
-        muted: "#7a7491", // tertiary text
-        faint: "#aaa4bf", // placeholders
+        canvas: "rgb(var(--c-canvas) / <alpha-value>)",
+        surface: "rgb(var(--c-surface) / <alpha-value>)",
+        subtle: "rgb(var(--c-subtle) / <alpha-value>)",
+        line: "rgb(var(--c-line) / <alpha-value>)",
+        "line-strong": "rgb(var(--c-line-strong) / <alpha-value>)",
+        ink: "rgb(var(--c-ink) / <alpha-value>)",
+        "ink-2": "rgb(var(--c-ink-2) / <alpha-value>)",
+        muted: "rgb(var(--c-muted) / <alpha-value>)",
+        faint: "rgb(var(--c-faint) / <alpha-value>)",
         brand: {
-          50: "#f4f1ff",
-          100: "#ebe5ff",
-          200: "#d9ceff",
+          50: "rgb(var(--c-brand-50) / <alpha-value>)",
+          100: "rgb(var(--c-brand-100) / <alpha-value>)",
+          200: "rgb(var(--c-brand-200) / <alpha-value>)",
           300: "#bba6ff",
           400: "#9b7bff",
           500: "#7c55fb",
-          600: "#6a3ef0",
-          700: "#5a2fd6",
+          600: "rgb(var(--c-brand-600) / <alpha-value>)",
+          700: "rgb(var(--c-brand-700) / <alpha-value>)",
           800: "#4a27ad",
           900: "#2e1a6e",
-        },
-        blush: {
-          50: "#fdf2f8",
-          100: "#fce7f3",
-          500: "#e0479e",
-          600: "#c92f86",
         },
       },
       fontFamily: {

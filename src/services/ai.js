@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { parsePartialJson } from "@/utils/partialJson";
+import { cleanDashes } from "@/utils/format";
 import { applyDocumentPatch, createEmptyDocument, normalizeDocument } from "@/services/documentBuilder";
 
 // All AI calls go through the `firstdraft-ai` Supabase Edge Function so the
@@ -13,10 +14,10 @@ const HISTORY_MESSAGES = 10;
 const PROGRESS_INTERVAL_MS = 50;
 
 const shape = (data) => ({
-  reply: typeof data?.reply === "string" ? data.reply : "",
+  reply: typeof data?.reply === "string" ? cleanDashes(data.reply) : "",
   document: data?.document && typeof data.document === "object" ? data.document : null,
   suggestions: Array.isArray(data?.suggestions)
-    ? data.suggestions.filter((s) => typeof s === "string" && s.trim()).slice(0, 4)
+    ? data.suggestions.filter((s) => typeof s === "string" && s.trim()).map(cleanDashes).slice(0, 4)
     : [],
 });
 
@@ -94,7 +95,7 @@ export async function chatTurn(messages, document, onProgress = () => {}) {
   }
 
   return {
-    reply: final.reply.trim() || "Done — take a look at the preview.",
+    reply: final.reply.trim() || "Done. Take a look at the preview.",
     document: final.document,
     suggestions: final.suggestions,
     usage,
@@ -135,7 +136,8 @@ async function postAction(action, payload) {
  * admissions reader. Optionally checks it against a pasted job posting.
  */
 export async function reviewDocument(document, jobDescription = "") {
-  const { result: r, usage } = await postAction("review", { document, jobDescription });
+  const { result: raw, usage } = await postAction("review", { document, jobDescription });
+  const r = JSON.parse(JSON.stringify(raw), (_k, v) => cleanDashes(v));
   const clamp = (n, max) => Math.max(0, Math.min(max, Math.round(Number(n) || 0)));
   return {
     review: {
@@ -164,7 +166,7 @@ export async function reviewDocument(document, jobDescription = "") {
 export async function importDocument(text) {
   const { result, usage } = await postAction("import", { text });
   if (!result.document) throw new Error("We couldn't read that document. Try another file.");
-  return { document: normalizeDocument(result.document), notes: String(result.notes || ""), usage };
+  return { document: normalizeDocument(result.document), notes: cleanDashes(String(result.notes || "")), usage };
 }
 
 /**
@@ -172,7 +174,8 @@ export async function importDocument(text) {
  * Contact details and anything the AI leaves out are kept from the original.
  */
 export async function tailorDocument(document, jobDescription) {
-  const { result, usage } = await postAction("tailor", { document, jobDescription });
+  const { result: raw, usage } = await postAction("tailor", { document, jobDescription });
+  const result = JSON.parse(JSON.stringify(raw), (_k, v) => cleanDashes(v));
   const resume = applyDocumentPatch(document, { ...result.resume, personalInfo: undefined });
   resume.personalInfo = { ...document.personalInfo };
 

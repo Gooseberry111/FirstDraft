@@ -4,7 +4,7 @@ import { useDraftStore } from "@/stores/draft";
 import { importDocument } from "@/services/ai";
 import { ACCEPTED_FILES, extractText } from "@/services/fileImport";
 import { analyzeDocument } from "@/services/quality";
-import { DOCUMENT_TYPES } from "@/services/documentBuilder";
+import { DOCUMENT_TYPES, docNoun } from "@/services/documentBuilder";
 import { defaultStyle, formatDesign } from "@/components/templates/themes";
 
 // Upload an existing CV / letter / essay → FirstDraft rebuilds it (one AI
@@ -33,18 +33,18 @@ export function useImportCv() {
       stage.value = "Opening your draft…";
       const name = document.personalInfo?.name;
       const draft = await draftStore.createDraftFrom({
-        title: name ? `${name} — ${type}` : `Imported ${type}`,
+        title: name ? `${name}'s ${docNoun(document.documentType)}` : `Imported ${docNoun(document.documentType)}`,
         document,
         template: formatDesign({ style: defaultStyle(document.documentType), accent: "violet" }),
         messages: [
-          { role: "user", content: `Import my existing ${type.toLowerCase()} (${file.name})` },
+          { role: "user", content: `Import my existing ${docNoun(document.documentType)} (${file.name})` },
           {
             role: "assistant",
             content:
-              `I've imported your ${type.toLowerCase()} — it's in the preview. ${notes}\n\n` +
+              `I've imported your ${docNoun(document.documentType)} and it's in the preview.\n\n` +
               `**Strength: ${quality.score}/100 (${quality.label}).**` +
-              (top ? ` The biggest win: ${top.title.charAt(0).toLowerCase()}${top.title.slice(1)}.` : "") +
-              `\n\nWant me to help make it stronger? I'll only use facts you give me.`,
+              (top ? ` The first thing I'd fix: ${top.title.charAt(0).toLowerCase()}${top.title.slice(1)}.` : "") +
+              `\n\nWant to work on it together? I'll only use facts you give me.`,
           },
         ],
       });

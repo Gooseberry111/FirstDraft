@@ -104,4 +104,18 @@ router.afterEach((to) => {
   document.title = to.meta.title ? `${to.meta.title} · FirstDraft` : "FirstDraft";
 });
 
+// After a new deploy, an open tab may ask for page files that no longer exist.
+// Reload once so the browser picks up the new version instead of hanging.
+router.onError((error, to) => {
+  const message = error?.message || "";
+  if (!/dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(message)) return;
+  try {
+    if (sessionStorage.getItem("fd.reloadedFor") === to.fullPath) return;
+    sessionStorage.setItem("fd.reloadedFor", to.fullPath);
+  } catch {
+    /* storage unavailable */
+  }
+  window.location.assign(to.fullPath);
+});
+
 export default router;

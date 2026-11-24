@@ -42,13 +42,15 @@ import {
   sampleFor,
   stylesFor,
 } from "@/components/templates/themes";
-import { useDraftStore } from "@/stores/draft";
+import { useDraftStore, WELCOME_MESSAGE } from "@/stores/draft";
+import { isTimeoutError } from "@/lib/supabase";
 import { chatTurn } from "@/services/ai";
 import {
   DOCUMENT_TYPES,
   createEmptyDocument,
   isDocumentEmpty,
   applyDocumentPatch,
+  docNoun,
   isProseDocument,
   normalizeDocument,
 } from "@/services/documentBuilder";
@@ -73,28 +75,28 @@ const STARTERS = [
   {
     type: "resume",
     icon: FileText,
-    description: "1–2 pages, tailored to a job",
+    description: "One or two pages, aimed at one job",
     question: "Great, let's build your resume. What kind of role are you going for?\n\nExample: Junior frontend developer",
     suggestions: ["Software / tech", "Marketing", "Finance", "I'm a student or recent grad"],
   },
   {
     type: "cv",
     icon: GraduationCap,
-    description: "Full academic & career history",
+    description: "Your full academic and work history",
     question: "Great, let's build your CV. What field is it for?",
     suggestions: ["Academic / research", "Medical", "General professional"],
   },
   {
     type: "cover_letter",
     icon: Mail,
-    description: "To go with a job application",
+    description: "Goes with your job application",
     question: "Let's write your cover letter. Which role and company are you applying to?\n\nExample: Product Designer at Spotify",
     suggestions: [],
   },
   {
     type: "essay",
     icon: PenLine,
-    description: "Personal statement, scholarship…",
+    description: "Personal statements and scholarships",
     question: "Let's write your essay. What is it for?",
     suggestions: ["College admission", "Scholarship", "Personal statement", "Something else"],
   },
@@ -128,6 +130,8 @@ const draftStore = useDraftStore();
 const draftId = ref("");
 const loading = ref(true);
 const loadError = ref("");
+const slowLoad = ref(false);
+let justCreated = null; // the draft we just inserted, so we don't fetch it again
 
 const messages = ref([]);
 const message = ref("");
@@ -223,14 +227,22 @@ async function createAndOpen() {
   loadError.value = "";
   try {
     const created = await draftStore.createDraft();
+    justCreated = created;
     router.replace({
       path: `/app/draft/${created.id}`,
       query: route.query.start ? { start: route.query.start } : {},
     });
   } catch (error) {
-    loadError.value = error?.message || "Couldn't create a new draft.";
+    loadError.value = isTimeoutError(error)
+      ? "The connection timed out. Check your internet and try again."
+      : error?.message || "Couldn't create a new draft.";
     loading.value = false;
   }
+}
+
+function retryLoad() {
+  if (route.params.id === "new") createAndOpen();
+  else loadDraft(String(route.params.id));
 }
 
 async function loadDraft(id) {
@@ -253,17 +265,26 @@ async function loadDraft(id) {
 
   if (!draftStore.draftsLoaded) draftStore.fetchDrafts().catch(() => {});
 
+  slowLoad.value = false;
+  const slowTimer = setTimeout(() => {
+    if (draftId.value === id && loading.value) slowLoad.value = true;
+  }, 10_000);
+
   try {
-    const [loaded, history] = await Promise.all([
-      draftStore.getDraft(id),
-      draftStore.getMessages(id),
-    ]);
+    const fresh = justCreated?.id === id ? justCreated : null;
+    justCreated = null;
+    const [loaded, history] = fresh
+      ? [fresh, []]
+      : await Promise.all([draftStore.getDraft(id), draftStore.getMessages(id)]);
     if (draftId.value !== id) return;
+    draftStore.currentDraft = loaded;
 
     const doc = normalizeDocument(loaded.document_data, loaded.document_type);
     latestDocument.value = doc;
     documentContent.value = structuredClone(doc);
-    messages.value = history.map(({ role, content }) => ({ role, content }));
+    // Older drafts stored the welcome message; newer ones show it locally.
+    const welcome = history[0]?.role === "assistant" ? [] : [{ role: "assistant", content: WELCOME_MESSAGE }];
+    messages.value = [...welcome, ...history.map(({ role, content }) => ({ role, content }))];
 
     templateChosenByUser.value = !!loaded.template;
     design.value = formatDesign(parseDesign(loaded.template || recommendStyle(doc), doc.documentType));
@@ -272,9 +293,15 @@ async function loadDraft(id) {
     loadError.value =
       error?.code === "PGRST116"
         ? "This draft doesn't exist or you don't have access to it."
-        : error?.message || "Couldn't load this draft.";
+        : isTimeoutError(error)
+          ? "The connection timed out. Check your internet and try again."
+          : error?.message || "Couldn't load this draft.";
   } finally {
-    if (draftId.value === id) loading.value = false;
+    clearTimeout(slowTimer);
+    if (draftId.value === id) {
+      loading.value = false;
+      slowLoad.value = false;
+    }
   }
 
   await scrollToBottom();
@@ -470,7 +497,7 @@ function autoTitle(doc) {
   const type = DOCUMENT_TYPES[doc.documentType] || "Draft";
   if (isProseDocument(doc.documentType) && doc.title) return doc.title.slice(0, 80);
   const name = doc.personalInfo?.name;
-  return name ? `${name} — ${type}` : "";
+  return name ? `${name}'s ${docNoun(doc.documentType)}` : "";
 }
 
 function recommendStyle(doc) {
@@ -805,7 +832,7 @@ onBeforeUnmount(() => {
         <button
           class="btn-secondary px-2.5 sm:px-3"
           :disabled="loading || !!loadError"
-          title="Save as PDF — choose “Save as PDF” in the print dialog"
+          title="Save as PDF (pick Save as PDF in the print window)"
           @click="exportPDF"
         >
           <FileDown :size="16" />
@@ -828,7 +855,10 @@ onBeforeUnmount(() => {
         <div class="card max-w-sm p-6 text-center">
           <AlertCircle :size="28" class="mx-auto text-red-500" />
           <p class="mt-3 text-ink-2">{{ loadError }}</p>
-          <RouterLink to="/app/dashboard" class="btn-primary mt-5">Back to dashboard</RouterLink>
+          <div class="mt-5 flex justify-center gap-2">
+            <button class="btn-primary" @click="retryLoad">Try again</button>
+            <RouterLink to="/app/dashboard" class="btn-secondary">Dashboard</RouterLink>
+          </div>
         </div>
       </div>
 
@@ -840,6 +870,14 @@ onBeforeUnmount(() => {
           aria-label="Chat"
         >
           <div ref="messagesContainer" class="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-5">
+            <div
+              v-if="loading && slowLoad"
+              class="mb-4 flex items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200"
+              role="status"
+            >
+              Still loading. Your connection might be slow.
+              <button class="shrink-0 font-semibold underline-offset-2 hover:underline" @click="retryLoad">Try again</button>
+            </div>
             <div v-if="loading" class="space-y-4">
               <div v-for="i in 4" :key="i" :class="i % 2 ? '' : 'ml-auto'" class="h-14 w-3/4 animate-pulse rounded-2xl bg-subtle" />
             </div>
@@ -923,12 +961,12 @@ onBeforeUnmount(() => {
               class="ml-9 mt-3 flex w-[calc(100%-2.25rem)] items-center gap-3 rounded-2xl border-2 border-dashed border-brand-200 bg-brand-50/50 p-3.5 text-left transition hover:border-brand-400 hover:bg-brand-50"
               @click="importCv"
             >
-              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-brand-600 shadow-sm">
+              <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-surface text-brand-600 shadow-sm">
                 <FileUp :size="18" />
               </span>
               <span>
                 <span class="block text-sm font-semibold text-ink">Already have a CV? Import it</span>
-                <span class="block text-xs text-muted">PDF, Word or text — we'll rebuild it and score it</span>
+                <span class="block text-xs text-muted">PDF, Word or text. We'll rebuild it and score it.</span>
               </span>
             </button>
 
@@ -997,7 +1035,7 @@ onBeforeUnmount(() => {
                 <span class="hidden font-medium text-muted sm:inline">· {{ currentStyleLabel }}</span>
                 <ChevronDown :size="15" class="text-muted transition" :class="designOpen && 'rotate-180'" />
               </button>
-              <span class="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-ink-2 ring-1 ring-line">
+              <span class="rounded-full bg-surface/80 px-3 py-1 text-xs font-semibold text-ink-2 ring-1 ring-line">
                 {{ DOCUMENT_TYPES[docType] }}
               </span>
               <button
@@ -1013,7 +1051,7 @@ onBeforeUnmount(() => {
 
               <button
                 v-if="!loading && hasStarted"
-                class="ml-auto flex items-center gap-2 rounded-xl bg-white py-1 pl-1 pr-3 text-left shadow-sm ring-1 ring-line transition hover:shadow-pop hover:ring-brand-200"
+                class="ml-auto flex items-center gap-2 rounded-xl bg-surface py-1 pl-1 pr-3 text-left shadow-sm ring-1 ring-line transition hover:shadow-pop hover:ring-brand-200"
                 title="See how strong your document is"
                 @click="qualityOpen = true"
               >

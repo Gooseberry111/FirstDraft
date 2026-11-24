@@ -7,7 +7,7 @@ import { useEditing } from "./editing";
 const props = defineProps({
   text: { type: String, default: "" },
   path: { type: Array, default: null },
-  placeholder: { type: String, default: "Add details — one point per line" },
+  placeholder: { type: String, default: "Add details, one point per line" },
 });
 
 const edit = useEditing();

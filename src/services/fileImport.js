@@ -49,7 +49,7 @@ export async function extractText(file) {
   if (name.endsWith(".pdf")) text = await pdfText(file);
   else if (name.endsWith(".docx")) text = await docxText(file);
   else if (name.endsWith(".txt") || name.endsWith(".md")) text = await file.text();
-  else if (name.endsWith(".doc")) throw new Error("Old .doc files aren't supported — save it as .docx or PDF and try again.");
+  else if (name.endsWith(".doc")) throw new Error("Old .doc files aren't supported. Save it as .docx or PDF and try again.");
   else throw new Error("Please upload a PDF, Word (.docx) or text file.");
 
   text = text.replace(/ /g, " ").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();

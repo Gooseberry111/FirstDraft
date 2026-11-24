@@ -1,6 +1,15 @@
 import { defineStore } from "pinia";
 import { supabase } from "@/lib/supabase";
 import { createEmptyDocument } from "@/services/documentBuilder";
+import { useAuthStore } from "@/stores/auth";
+
+// The signed-in user id, without a network round trip.
+async function currentUserId() {
+  const auth = useAuthStore();
+  if (auth.user?.id) return auth.user.id;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id || null;
+}
 
 export const WELCOME_MESSAGE =
   "Hi! I'm FirstDraft. What would you like to create today?\n\n- CV\n- Resume\n- Cover Letter\n- Essay";
@@ -28,17 +37,15 @@ export const useDraftStore = defineStore("draft", {
       return this.drafts;
     },
 
+    // One request: the welcome message is shown by the app, not stored.
     async createDraft() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) throw new Error("Please sign in to create a draft.");
+      const userId = await currentUserId();
+      if (!userId) throw new Error("Please sign in to create a draft.");
 
       const { data, error } = await supabase
         .from("drafts")
         .insert({
-          user_id: user.id,
+          user_id: userId,
           title: "Untitled Draft",
           document_data: createEmptyDocument("resume"),
           // null = "not chosen yet", so FirstDraft can recommend one
@@ -50,8 +57,6 @@ export const useDraftStore = defineStore("draft", {
 
       if (error) throw error;
 
-      await this.addMessage(data.id, "assistant", WELCOME_MESSAGE);
-
       this.currentDraft = data;
       this.drafts.unshift(data);
       return data;
@@ -59,14 +64,12 @@ export const useDraftStore = defineStore("draft", {
 
     // Creates a draft that already has content (import / tailor).
     async createDraftFrom({ title, document, template = null, messages = [] }) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Please sign in to create a draft.");
+      const userId = await currentUserId();
+      if (!userId) throw new Error("Please sign in to create a draft.");
 
       const { data, error } = await supabase
         .from("drafts")
-        .insert({ user_id: user.id, title: title || "Untitled Draft", document_data: document, template })
+        .insert({ user_id: userId, title: title || "Untitled Draft", document_data: document, template })
         .select()
         .single();
       if (error) throw error;

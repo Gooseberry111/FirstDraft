@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { FileDown, Loader2, Lock, Sparkles } from "lucide-vue-next";
 import BrandMark from "@/components/BrandMark.vue";
+import ThemeToggle from "@/components/ThemeToggle.vue";
 import DocumentRenderer from "@/components/templates/DocumentRenderer.vue";
 import { useDraftStore } from "@/stores/draft";
 import { DOCUMENT_TYPES, normalizeDocument } from "@/services/documentBuilder";
@@ -62,10 +63,11 @@ function downloadPdf() {
 
 <template>
   <div class="min-h-full">
-    <header class="sticky top-0 z-20 border-b border-line/80 bg-white/80 backdrop-blur-xl">
+    <header class="sticky top-0 z-20 border-b border-line/80 bg-surface/80 backdrop-blur-xl">
       <div class="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4">
         <RouterLink to="/" aria-label="FirstDraft"><BrandMark /></RouterLink>
         <div class="flex items-center gap-2">
+          <ThemeToggle />
           <button v-if="doc" class="btn-secondary px-3" @click="downloadPdf">
             <FileDown :size="16" /> <span class="hidden sm:inline">Download PDF</span>
           </button>
@@ -80,9 +82,9 @@ function downloadPdf() {
       <div v-if="loading" class="grid place-items-center py-24 text-muted"><Loader2 :size="26" class="animate-spin" /></div>
 
       <div v-else-if="!doc" class="mx-auto mt-10 max-w-md text-center">
-        <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white text-muted shadow-card"><Lock :size="24" /></span>
+        <span class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-surface text-muted shadow-card"><Lock :size="24" /></span>
         <h1 class="mt-5 text-2xl font-bold text-ink">This link isn't available</h1>
-        <p class="mt-2 text-muted">The owner may have stopped sharing it, or the link is incorrect.</p>
+        <p class="mt-2 text-muted">The owner may have turned off sharing, or the link might be wrong.</p>
         <RouterLink to="/" class="btn-primary mt-6">Go to FirstDraft</RouterLink>
       </div>
 
@@ -107,7 +109,7 @@ function downloadPdf() {
           </div>
         </div>
         <p class="mt-6 text-center text-sm text-muted">
-          Made with <RouterLink to="/" class="font-semibold text-brand-700 hover:underline">FirstDraft</RouterLink> — build a strong CV just by chatting.
+          Made with <RouterLink to="/" class="font-semibold text-brand-700 hover:underline">FirstDraft</RouterLink>. You can make your own for free.
         </p>
       </div>
     </main>

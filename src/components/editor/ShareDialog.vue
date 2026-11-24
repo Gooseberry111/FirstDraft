@@ -38,7 +38,7 @@ async function copy() {
     copied.value = true;
     setTimeout(() => (copied.value = false), 2000);
   } catch {
-    error.value = "Couldn't copy — select the link and copy it manually.";
+    error.value = "Couldn't copy the link. Select it and copy it yourself.";
   }
 }
 </script>
@@ -53,7 +53,7 @@ async function copy() {
         <component :is="shareUrl ? Globe : Lock" :size="19" />
       </span>
       <div class="min-w-0 flex-1">
-        <p class="text-sm font-semibold text-ink">{{ shareUrl ? "Anyone with the link can view" : "Private — only you can see it" }}</p>
+        <p class="text-sm font-semibold text-ink">{{ shareUrl ? "Anyone with the link can view" : "Private. Only you can see it" }}</p>
         <p class="text-xs text-muted">{{ shareUrl ? "They can't edit it or see your chat." : "Turn on sharing to get a link." }}</p>
       </div>
       <button
@@ -75,7 +75,7 @@ async function copy() {
           :value="shareUrl"
           readonly
           aria-label="Share link"
-          class="min-w-0 flex-1 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink focus:outline-none"
+          class="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink focus:outline-none"
           @focus="$event.target.select()"
         />
         <button class="btn-primary shrink-0" @click="copy">

@@ -15,7 +15,7 @@ const memberSince = computed(() =>
         month: "long",
         year: "numeric",
       })
-    : "—",
+    : "Unknown",
 );
 
 onMounted(() => {
